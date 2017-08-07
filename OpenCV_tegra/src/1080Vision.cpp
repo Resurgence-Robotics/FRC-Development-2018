@@ -56,7 +56,7 @@ double Val[] {60, 255};
 
 	};
 void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[]);//created above main so it can be used, but defined later to keep from using up space
-
+void FindContours(Mat &input, vector<vector<Point> > &contours);
 int main()
 {
 	//create videostream object and image
@@ -99,4 +99,12 @@ void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[
 	inRange(output, cv::Scalar(Hue[0],Sat[0],Val[0]),cv::Scalar(Hue[1],Sat[1],Val[1]),output);
 }
 
+void FindContours(Mat &input, vector<vector<Point> > &contours) {
+	vector<Vec4i> hierarchy;
+	contours.clear();
+	cv::findContours(input, contours, hierarchy, RETR_EXTERNAL, CHAIN_APPROX_SIMPLE);
+}
+void FilterContours()
+{
 
+}
