@@ -33,7 +33,7 @@
 								<option defaultValue="gnu.c.optimization.level.none" id="gnu.c.compiler.option.optimization.level.2012673284" name="Optimization Level" superClass="gnu.c.compiler.option.optimization.level" useByScannerDiscovery="false" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.debugging.level.1432655149" name="Debug Level" superClass="gnu.c.compiler.option.debugging.level" useByScannerDiscovery="false" value="gnu.c.debugging.level.max" valueType="enumerated"/>
 								<option id="gnu.c.compiler.option.include.paths.1306848776" name="Include paths (-I)" superClass="gnu.c.compiler.option.include.paths" useByScannerDiscovery="false" valueType="includePath">
-									<listOptionValue builtIn="false" value="&quot;C:\Users\morga\opencv320\Build\install\include&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:\OPENCV-I&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.c.compiler.input.1973969299" superClass="cdt.managedbuild.tool.gnu.c.compiler.input"/>
 							</tool>
@@ -59,7 +59,7 @@
 									<listOptionValue builtIn="false" value="opencv_ffmpeg320_64"/>
 								</option>
 								<option id="gnu.cpp.link.option.paths.1927038445" name="Library search path (-L)" superClass="gnu.cpp.link.option.paths" useByScannerDiscovery="false" valueType="libPaths">
-									<listOptionValue builtIn="false" value="&quot;C:\Users\morga\opencv320\Build\install\x64\mingw\bin&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;C:\OPENCV-L&quot;"/>
 								</option>
 								<inputType id="cdt.managedbuild.tool.gnu.cpp.linker.input.660859363" superClass="cdt.managedbuild.tool.gnu.cpp.linker.input">
 									<additionalInput kind="additionalinputdependency" paths="$(USER_OBJS)"/>
