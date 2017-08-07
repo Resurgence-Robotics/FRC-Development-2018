@@ -79,13 +79,13 @@ int main()
 	//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);// 2 channel
 		HSVThreshold(Frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
-		imwrite(HSVfilteredImage,HSVThresholdOutput);
+		imwrite(HSVfilteredImage,HSVThresholdOutput);// create a new image to show the processing worked
 	//identify contours
 
 	//convex hull the image
 
 //perform algorithms described later to score and classify the contours.
-		//sleep(.05);//20fps
+		//sleep(.05);//20fps--not a real measurement
 		//break;
 	}
 	return 0;
