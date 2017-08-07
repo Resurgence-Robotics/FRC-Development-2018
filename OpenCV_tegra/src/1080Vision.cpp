@@ -31,20 +31,23 @@ using namespace std;
 #define Y_EDGE_LIMIT 4
 #define CAM_ID 0
 #define CAM_IP 10.10.80.250
-string OriginalImage ("C:/Users/Public/Pictures/Original.jpg"); // will throw escape sequences in linux
-//string HSVfilteredImage ("C:\Users\Public\Pictures\Filters.jpg");// in case we need a better starting point
+string OriginalImage ("Samples/Original.png"); // will throw escape sequences in linux CHANGE FWDSLASH TO BKSLASH
+string HSVfilteredImage ("Samples/HSVThresholdOutput.png");
 
 //Minimum area of particles to be considered
 #define AREA_MINIMUM 500// 500 pixels
 // define the HSV threshold values for filtering our target
-int HSV[6] { 60, 100, 90, 255, 20, 255};	//HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
+double Hue[] {60, 100};
+double Sat[] {90, 255};
+double Val[] {20, 255};	//HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
 //Edge profile constants of our shape
 #define XMAXSIZE 300
 #define XMINSIZE 24
 #define YMAXSIZE 600
 #define YMINSIZE 24
 //Structure to represent the scores for the various tests used for target identification WILL BE USED LATER
-	struct Scores {
+	struct Scores
+	{
 		double rectangularity;
 		double aspectRatioInner;
 		double aspectRatioOuter;
@@ -52,7 +55,7 @@ int HSV[6] { 60, 100, 90, 255, 20, 255};	//HSV threshold criteria array, ranges 
 		double yEdge;
 
 	};
-
+void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[]);//created above main so it can be used, but defined later to keep from using up space
 
 int main()
 {
@@ -61,29 +64,37 @@ int main()
 	VideoCapture Stream;
 	Stream= VideoCapture(CAM_ID);//starts a camera stream
 	//from image
-	Mat Original ;
+	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX); ;
 	Original= imread(OriginalImage);// loads an image from the file
-	//Original= imread()
 	// create windows for viewing each step in filter process until we are able to run without them ie... "calibrated"
 
 	while(true)//change later to something like "while an image exists"
 	{
 
 	//grab one image from file or stream
-		Mat Frame;
-		Frame= Stream.grab();// from usb
-		//Frame= Original;// from filesystem
-	//process it-> WHEN EACH OF THE BELOW STEPS IS COMPLETE THEY SHOULD HAVE A CORRESPONDING WINDOW FOR PREVIEWS.
-		//HSV filter
-		printf("Threshold: %i, %i, %i, %i, %i, %i, \n", HSV[0], HSV[1], HSV[2], HSV[3], HSV[4], HSV[5]  );// how to use arrays
-		//canny edge detect edges within the object
-		//convex hull the image
-		//remove any smaller particles
-	//perform algorithms described later to score and classify the object
-	}
+		Mat Frame(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
+		//frame= Stream.grab();// from usb, grab a frame if new frame is available
+		Frame= Original;// from filesystem
+//process it-> WHEN EACH OF THE BELOW STEPS IS COMPLETE THEY SHOULD HAVE A CORRESPONDING WINDOW FOR PREVIEWS.
+	//HSV filter
+		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);// 2 channel
+		HSVThreshold(Frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
+		imwrite(HSVfilteredImage,HSVThresholdOutput);
+	//identify contours
 
+	//convex hull the image
+
+//perform algorithms described later to score and classify the contours.
+		//sleep(.05);//20fps
+		//break;
+	}
 	return 0;
 }
 
+void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[])// this function uses an input and output givin by the user allowing major flexibility
+{
+	cvtColor(input,output,cv::COLOR_BGR2HSV);// convert the image from color image channles to 2 channel HSV "black white", binary
+	inRange(output, cv::Scalar(Hue[0],Sat[0],Val[0]),cv::Scalar(Hue[1],Sat[1],Val[1]),output);
+}
 
 
