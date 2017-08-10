@@ -1,31 +1,28 @@
 <grip:Pipeline>
   <sources>
     <grip:ImageFile>
-      <property name="path" value="C:\Users\morga\Downloads\Axis_Example.jpg"/>
+      <property name="path" value="C:\Users\morga\Documents\FRC-Development-2018\OpenCV_tegra\Samples\Original.png"/>
     </grip:ImageFile>
-    <grip:Camera>
-      <property name="deviceNumber" value="0"/>
-    </grip:Camera>
   </sources>
   <steps>
     <grip:Step name="HSV Threshold">
       <grip:Input step="0" socket="0"/>
       <grip:Input step="0" socket="1">
         <value>
-          <double>49.4028851519753</double>
-          <double>86.0397599524763</double>
+          <double>40.10203104124718</double>
+          <double>95.2518088299378</double>
         </value>
       </grip:Input>
       <grip:Input step="0" socket="2">
         <value>
-          <double>137.32373458354593</double>
+          <double>141.91006551879775</double>
           <double>255.0</double>
         </value>
       </grip:Input>
       <grip:Input step="0" socket="3">
         <value>
-          <double>110.07194244604317</double>
-          <double>255.0</double>
+          <double>61.915467625899275</double>
+          <double>244.12116040955632</double>
         </value>
       </grip:Input>
       <grip:Output step="0" socket="0" previewed="true"/>
@@ -59,8 +56,8 @@
       </grip:Input>
       <grip:Input step="2" socket="7">
         <value>
-          <int>0</int>
-          <int>100</int>
+          <double>21.58273381294964</double>
+          <double>100.0</double>
         </value>
       </grip:Input>
       <grip:Input step="2" socket="8">
@@ -81,51 +78,23 @@
       <grip:Input step="3" socket="0"/>
       <grip:Output step="3" socket="0" previewed="true"/>
     </grip:Step>
-    <grip:Step name="HTTP Publish ContoursReport">
-      <grip:Input step="4" socket="0"/>
-      <grip:Input step="4" socket="1">
-        <value>myContoursReport</value>
-      </grip:Input>
-      <grip:Input step="4" socket="2">
-        <value>true</value>
-      </grip:Input>
-      <grip:Input step="4" socket="3">
-        <value>true</value>
-      </grip:Input>
-      <grip:Input step="4" socket="4">
-        <value>true</value>
-      </grip:Input>
-      <grip:Input step="4" socket="5">
-        <value>true</value>
-      </grip:Input>
-      <grip:Input step="4" socket="6">
-        <value>true</value>
-      </grip:Input>
-      <grip:Input step="4" socket="7">
-        <value>true</value>
-      </grip:Input>
-    </grip:Step>
   </steps>
   <connections>
-    <grip:Connection>
-      <grip:Output step="1" socket="0" previewed="true"/>
-      <grip:Input step="2" socket="0"/>
-    </grip:Connection>
     <grip:Connection>
       <grip:Output step="2" socket="0" previewed="true"/>
       <grip:Input step="3" socket="0"/>
     </grip:Connection>
     <grip:Connection>
-      <grip:Output step="3" socket="0" previewed="true"/>
-      <grip:Input step="4" socket="0"/>
-    </grip:Connection>
-    <grip:Connection>
-      <grip:Output source="1" socket="0" previewed="true"/>
+      <grip:Output source="0" socket="0" previewed="true"/>
       <grip:Input step="0" socket="0"/>
     </grip:Connection>
     <grip:Connection>
       <grip:Output step="0" socket="0" previewed="true"/>
       <grip:Input step="1" socket="0"/>
+    </grip:Connection>
+    <grip:Connection>
+      <grip:Output step="1" socket="0" previewed="true"/>
+      <grip:Input step="2" socket="0"/>
     </grip:Connection>
   </connections>
   <settings>
