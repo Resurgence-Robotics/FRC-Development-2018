@@ -57,11 +57,11 @@ double Val[] {60, 255};
 		double yEdge;
 
 	};
-	typedef vector<vector<Point> > TContours;
-	typedef vector<Point> UContour;
+	typedef vector<vector<Point> > ShapeArray; //  an array of contours
+	typedef vector<Point> Points;// a list of continuous points that form a contour (x,y)
 void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[]);//created above main so it can be used, but defined later to keep from using up space
-void GetContours(Mat &input, TContours &contours);
-void FilterContours(TContours &input, TContours &output);
+void GetContours(Mat &input, ShapeArray &contours);
+void FilterContours(ShapeArray &input, ShapeArray &output);
 int main()
 {
 	//create videostream object and image
@@ -85,10 +85,12 @@ int main()
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
 	//identify contours
-		TContours contours; //created empty vector
+		ShapeArray contours; //created empty vector
 		GetContours(HSVThresholdOutput, contours);
-		PrintVector(contours);
-	//Filter contours
+		//Filter contours
+		ShapeArray FinalContours;
+		FilterContours(contours,FinalContours);
+
 //
 //		TContours finalContours;
 //		FilterContours(contours, finalContours);
@@ -100,13 +102,7 @@ int main()
 	}
 	return 0;
 }
-void PrintVector(TContours &input)
-{
-	for (int i= 0; i< input.end(); i++)
-	{
-		printf("%i, ", input[i]);
-	}
-}
+
 void HSVThreshold(Mat &input, Mat &output, double Hue[], double Sat[], double Val[])// this function uses an input and output givin by the user allowing major flexibility
 {
 	cvtColor(input,output,cv::COLOR_BGR2HSV);// convert the image from color image channles to 2 channel HSV "black white", binary
@@ -114,16 +110,16 @@ void HSVThreshold(Mat &input, Mat &output, double Hue[], double Sat[], double Va
 	imwrite(HSVfilteredImage,output);// create a new image to show the processing worked
 }
 
-void GetContours(Mat &input, TContours &contours)
+void GetContours(Mat &input, ShapeArray &contours)
 {
 	Mat CannyOutput;
 	Canny(input, CannyOutput, X_IMAGE_RES, Y_IMAGE_RES);
 	vector<Vec4i> hierarchy;
-	findContours(CannyOutput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE);
+	findContours(CannyOutput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 	imwrite(ContoursImage, CannyOutput);
 }
 
-void FilterContours(TContours &input, TContours &output)
+void FilterContours(ShapeArray &input, ShapeArray &output)
 {
 	double minArea = 300.0;  // default Double
 	double minPerimeter = 0.0;  // default Double
@@ -136,29 +132,33 @@ void FilterContours(TContours &input, TContours &output)
 	double minVertices = 0.0;  // default Double
 	double minRatio = 0.0;  // default Double
 	double maxRatio = 1000.0;  // default Double
-	TContours hull;
-	UContour shape;
+	ShapeArray hull;
 	output.clear();
 	Mat OutputImage(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
+	int sizeOfArray=int(input.size())-1;
 	vector<Vec4i> hierarchy;
 
-	for (UContour contour: input)
+	for (int i=0; i<= sizeOfArray; i++)
 			{
-				Rect bb = boundingRect(input);
+				Points store =input[i];
+
+				//cout <<store[i]<<endl;
+				Rect bb = boundingRect(store);
 				if (bb.width < minWidth || bb.width > maxWidth) continue;
 				if (bb.height < minHeight || bb.height > maxHeight) continue;
-				double area = contourArea(input);
+				double area = contourArea(store);
 				if (area < minArea) continue;
-				if (arcLength(input, true) < minPerimeter) continue;
-				convexHull(Mat(input, true), hull);
-				double solid = 100 * area / contourArea(hull);
-				if (solid < solidity[0] || solid > solidity[1]) continue;
-				if (input.size() < minVertices || input.size() > maxVertices)	continue;
-				double ratio = (double) bb.width / (double) bb.height;
-				if (ratio < minRatio || ratio > maxRatio) continue;
-				output.push_back(contour);
+				if (arcLength(store, true) < minPerimeter) continue;
+				convexHull(store, hull);
+//				double solid = 100 * area / contourArea(hull);
+//				if (solid < solidity[0] || solid > solidity[1]) continue;
+//				if (store.size() < minVertices || store.size() > maxVertices)	continue;
+//				double ratio = (double) bb.width / (double) bb.height;
+//				if (ratio < minRatio || ratio > maxRatio) continue;
+//				output.push_back(store);
+//				store.clear();
 
 			}
-			drawContours(OutputImage, hull, -1, 255, CV_FILLED);
-			imshow(filteredImage, OutputImage);
+		//	drawContours(OutputImage, hull, -1, 255, CV_FILLED);
+		//	imshow(filteredImage, OutputImage);
 }
