@@ -30,7 +30,7 @@ using namespace std;
 string OriginalImage ("Samples/Original.png"); // test sample images
 string HSVfilteredImage ("Samples/HSVThresholdOutput.png");
 string ContoursImage ("Samples/ContoursImage.png");
-string filteredImage("Samples/ContoursImage.png");
+string filteredImage("Samples/FilteredImage.png");
 //CLASSIFICATION OF THE OBJECT WE ARE PROCESSING used for target identification
 //							*** units = pixel ***
 #define ASPECT_RATIO_CONST 2.75 // FOR RECTANGULAR OBJECTS ONLY, TARGET WIDTH TO HIGHT RATIO
@@ -38,10 +38,6 @@ string filteredImage("Samples/ContoursImage.png");
 #define XMAXSIZE 300
 #define XMINSIZE 24
 #define YMAXSIZE 600
-#define YMINSIZE 24
-
-//Minimum area of particles to be considered
-#define AREA_MINIMUM 500// 500 pixels
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
 double Hue[] {75, 100};
 double Sat[] {90, 255};
@@ -89,11 +85,7 @@ int main()
 		GetContours(HSVThresholdOutput, contours);
 		//Filter contours
 		ShapeArray FinalContours;
-		FilterContours(contours,FinalContours);
-
-//
-//		TContours finalContours;
-//		FilterContours(contours, finalContours);
+		FilterContours(contours,FinalContours);// returning image of different size
 
 
 
@@ -132,7 +124,9 @@ void FilterContours(ShapeArray &input, ShapeArray &output)
 	double minVertices = 0.0;  // default Double
 	double minRatio = 0.0;  // default Double
 	double maxRatio = 1000.0;  // default Double
-	ShapeArray hull;
+	ShapeArray hull( input.size() );
+
+
 	output.clear();
 	Mat OutputImage(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
 	int sizeOfArray=int(input.size())-1;
@@ -149,16 +143,16 @@ void FilterContours(ShapeArray &input, ShapeArray &output)
 				double area = contourArea(store);
 				if (area < minArea) continue;
 				if (arcLength(store, true) < minPerimeter) continue;
-				convexHull(store, hull);
-//				double solid = 100 * area / contourArea(hull);
-//				if (solid < solidity[0] || solid > solidity[1]) continue;
-//				if (store.size() < minVertices || store.size() > maxVertices)	continue;
-//				double ratio = (double) bb.width / (double) bb.height;
-//				if (ratio < minRatio || ratio > maxRatio) continue;
-//				output.push_back(store);
-//				store.clear();
+				convexHull( Mat(store,true), hull[i], false );
+				double solid = 100 * area / contourArea(hull[i]);
+				if (solid < solidity[0] || solid > solidity[1]) continue;
+				if (store.size() < minVertices || store.size() > maxVertices)	continue;
+				double ratio = (double) bb.width / (double) bb.height;
+				if (ratio < minRatio || ratio > maxRatio) continue;
+				output.push_back(store);
+				store.clear();
 
 			}
-		//	drawContours(OutputImage, hull, -1, 255, CV_FILLED);
-		//	imshow(filteredImage, OutputImage);
+			drawContours(OutputImage, hull, -1, 127, CV_FILLED);
+			imwrite(filteredImage, OutputImage);
 }
