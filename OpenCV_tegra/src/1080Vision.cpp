@@ -1,12 +1,19 @@
-#include <stdio.h>	// standard input and output stream
-#include <stdlib.h>	// standard library for system level functions and low level application access
-#include <string> 	// library for using the string data type
-#include <iostream>	// linux gcc application io
-#include <sstream>	// linux gcc runtime access
-#include <unistd.h>	// universal standard numeric rules
+#include <sys/types.h>
+#ifdef __WIN32__
+# include <winsock2.h>// windows
+#else
+# include <sys/socket.h>// linux
+#endif
+//system includes
+#include <stdio.h>	//
+#include <stdlib.h>	//
+#include <string> 	//
+#include <iostream>	//
+#include <sstream>	//
+#include <unistd.h>	//
+#include <math.h>
 //opencv includes
 #include <opencv2/opencv.hpp>// all C++ libs for opencv algorithms
-#include <opencv2/core.hpp>// data types specific to images and matrix functionality, as well as matrix arithmetic
 
 using namespace cv;
 using namespace std;
@@ -19,75 +26,124 @@ using namespace std;
 
 // functions to override
 //Camera constants used for distance calculation
-#define X_IMAGE_RES 320		//X Image resolution in pixels, should be 160, 320 or 640 Y image resolution is double for 2:1 aspect ratio
-#define Y_IMAGE_RES 640
-#define VIEW_ANGLEH 61		//MICROSOFT LIFECAM HD-5000
-#define VIEW_ANGLEV 34.3	//MICROSOFT LIFECAM HD-5000
+#define X_IMAGE_RES 640		//X Image resolution in pixels, should be 160, 320 or 640 Y image resolution is double for 2:1 aspect ratio
+#define Y_IMAGE_RES 320
+#define VIEW_ANGLE_X 61		//MICROSOFT LIFECAM HD-5000
+#define VIEW_ANGLE_Y 34.3	//MICROSOFT LIFECAM HD-5000
 //#define VIEW_ANGLE 43.5  //Axis M1011 camera -- OUR IP CAM FROM KOP
 //image locations
 #define CAM_ID 0 // usb camera
 #define CAM_IP 10.10.80.250 // ip camera
+string WebServer("roboRIO-1080-FRC.local");
 string OriginalImage ("Samples/Original.png"); // test sample images
+string RGBModImage("Samples/RGBModImage.png");
 string HSVfilteredImage ("Samples/HSVThresholdOutput.png");
 string ContoursImage ("Samples/ContoursImage.png");
 string filteredImage("Samples/FilteredImage.png");
+ofstream LOGFILE("LOG.csv");
 //CLASSIFICATION OF THE OBJECT WE ARE PROCESSING used for target identification
 //							*** units = pixel ***
 #define ASPECT_RATIO_CONST 2.75 // FOR RECTANGULAR OBJECTS ONLY, TARGET WIDTH TO HIGHT RATIO
 //Edge profile constants of our shape
+#define Twidth 2 //in
+#define Theight 5 //in
 #define XMAXSIZE 300
 #define XMINSIZE 24
 #define YMAXSIZE 600
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
-double Hue[] {75, 100};
-double Sat[] {90, 255};
-double Val[] {60, 255};
+double Hue[] {0, 180};
+double Sat[] {0, 162};
+double Val[] {137, 255};
+double minArea = 300.0;
+double minPerimeter = 0.0;
+double minWidth = 0.0;
+double maxWidth = 1000.0;
+double minHeight = 0.0;
+double maxHeight = 1000.0;
+double solidity[] = {20, 100};
+double maxVertices = 1000000.0;
+double minVertices = 0.0;
+double minRatio = 0.0;
+double maxRatio = 1000.0;
 
+typedef vector<vector<Point> > ShapeArray; //  an array of contours that make up a shape[1],[2] = [(x,y), (x,y)...], [(x,y), (x,y)...]
+typedef vector<Point> Points;// an Array of continuous points that form a single contour [1],[2]= [x,y],[x,y]
+
+float Map(float x, float in_min, float in_max, float out_min, float out_max)
+{
+	// use this function to match two value's scales proportionally
+	return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+}
+float Limit(float num)
+{
+	   if (num > 1.0)
+	   {
+			   return 1.0;
+	   }
+	   if (num < -1.0)
+	   {
+			   return -1.0;
+	   }
+	   return num;
+}
 //Structure to represent the scores for the various tests used for target identification WILL BE USED LATER
-	struct Scores
-	{
-		double rectangularity;
-		double aspectRatioInner;
-		double aspectRatioOuter;
-		double xEdge;
-		double yEdge;
+struct Report
+{
+	int GoalCount;
+	Point Center;
+	double xEdge;
+	double yEdge;
+	double Distance;
+	double Skew;
+	float Angle;
+	double PointOfAim;
+};
 
-	};
-	typedef vector<vector<Point> > ShapeArray; //  an array of contours
-	typedef vector<Point> Points;// a list of continuous points that form a contour (x,y)
 void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[]);//created above main so it can be used, but defined later to keep from using up space
 void GetContours(Mat &input, ShapeArray &contours);
-void FilterContours(ShapeArray &input, ShapeArray &output);
+void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage);
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals);
+void Write_csv( Report Goal[], ofstream &output);
+void ModifyRGB(float intensity, bool reduceR, bool reduceG,  bool reduceB, Mat &input);
+//void GlobalFieldPosition(ShapeArray &inputImage, float &GyroHeading, float &FieldX, float &FieldY);
+void SendRobotDataUDP();
 int main()
 {
 	//create videostream object and image
 	// from stream
 	VideoCapture Stream;
 	Stream= VideoCapture(CAM_ID);//starts a camera stream
+	Stream.set(CV_CAP_PROP_FRAME_WIDTH, X_IMAGE_RES);
+	Stream.set(CV_CAP_PROP_FRAME_HEIGHT, Y_IMAGE_RES);
 	//from image
-	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX); ;
+	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);
 	Original= imread(OriginalImage);// loads an image from the file
-	// create windows for viewing each step in filter process until we are able to run without them ie... "calibrated"
 
 	while(true)//change later to something like "while an image exists"
 	{
 
-	//grab one image from file or stream
-		Mat frame(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
+	//Grab Image
+		Mat frame(X_IMAGE_RES, Y_IMAGE_RES,CV_CN_MAX);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
 		//frame= Stream.grab();// from usb, grab a frame if new frame is available
 		frame= Original;// from filesystem
-	// WHEN EACH OF THE BELOW STEPS IS COMPLETE, create a window or new image for validation.
-	//HSV filter
+		//modify RGB
+		// ModifyRGB(0.05, true, false, true, frame);
+		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
 	//identify contours
 		ShapeArray contours; //created empty vector
 		GetContours(HSVThresholdOutput, contours);
-		//Filter contours
-		ShapeArray FinalContours;
-		FilterContours(contours,FinalContours);// returning image of different size
-
-
+	//Filter contours
+		ShapeArray Goals;
+		Mat FilteredOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
+		FilterContours(contours, Goals, frame);// returning image of different size?
+	//calculate and score object
+		Report GoalReport[Goals.size()];
+		GenerateTargetReport(Goals, GoalReport,frame);
+	//report via UDP and CSV
+		//csv
+		Write_csv(GoalReport,LOGFILE);
 
 	//	waitKey();// waits to exit program until we have pressed a key
 		break;
@@ -97,8 +153,8 @@ int main()
 
 void HSVThreshold(Mat &input, Mat &output, double Hue[], double Sat[], double Val[])// this function uses an input and output givin by the user allowing major flexibility
 {
-	cvtColor(input,output,cv::COLOR_BGR2HSV);// convert the image from color image channles to 2 channel HSV "black white", binary
-	inRange(output, cv::Scalar(Hue[0],Sat[0],Val[0]),cv::Scalar(Hue[1],Sat[1],Val[1]),output);
+	cvtColor(input,output,COLOR_BGR2HSV);// convert the image from color image channles to 2 channel HSV "black white", binary
+	inRange(output, Scalar(Hue[0],Sat[0],Val[0]),Scalar(Hue[1],Sat[1],Val[1]),output);
 	imwrite(HSVfilteredImage,output);// create a new image to show the processing worked
 }
 
@@ -111,32 +167,19 @@ void GetContours(Mat &input, ShapeArray &contours)
 	imwrite(ContoursImage, CannyOutput);
 }
 
-void FilterContours(ShapeArray &input, ShapeArray &output)
+void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
 {
-	double minArea = 300.0;  // default Double
-	double minPerimeter = 0.0;  // default Double
-	double minWidth = 0.0;  // default Double
-	double maxWidth = 1000.0;  // default Double
-	double minHeight = 0.0;  // default Double
-	double maxHeight = 1000.0;  // default Double
-	double solidity[] = {20, 100};
-	double maxVertices = 1000000.0;  // default Double
-	double minVertices = 0.0;  // default Double
-	double minRatio = 0.0;  // default Double
-	double maxRatio = 1000.0;  // default Double
+
 	ShapeArray hull( input.size() );
 
 
 	output.clear();
-	Mat OutputImage(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
 	int sizeOfArray=int(input.size())-1;
 	vector<Vec4i> hierarchy;
 
 	for (int i=0; i<= sizeOfArray; i++)
 			{
 				Points store =input[i];
-
-				//cout <<store[i]<<endl;
 				Rect bb = boundingRect(store);
 				if (bb.width < minWidth || bb.width > maxWidth) continue;
 				if (bb.height < minHeight || bb.height > maxHeight) continue;
@@ -153,6 +196,61 @@ void FilterContours(ShapeArray &input, ShapeArray &output)
 				store.clear();
 
 			}
-			drawContours(OutputImage, hull, -1, 127, CV_FILLED);
+			drawContours(OutputImage, hull, -1, 255, CV_FILLED);
 			imwrite(filteredImage, OutputImage);
+}
+
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals)
+{
+	int sizeOfArray=int(input.size());// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
+	for(int i=0; i<sizeOfArray; i++)
+	{
+		Rect bb = boundingRect(input[i]);
+		Goal[i].Center.x = bb.x + (bb.width/2);
+		Goal[i].Center.y = bb.y + (bb.height/2);
+		Goal[i].xEdge = bb.width;
+		Goal[i].yEdge = bb.height;
+		Goal[i].GoalCount = sizeOfArray;
+		Goal[i].PointOfAim = Map(Goal[i].Center.x,0,X_IMAGE_RES,-1,1);
+		Goal[i].Distance = (Theight / (tan(bb.height * (VIEW_ANGLE_Y / Y_IMAGE_RES) * (3.14159 / 180))));
+		Goal[i].Angle = acos(2.0 * (Goal[i].Distance * (tan(float(bb.width) * (float(VIEW_ANGLE_X) / float(X_IMAGE_RES)) * (3.14159 / float(180)))/2)) / float(Twidth / 2));
+		printf("%i goals, Goal[%i] Center is: [%i,%i], POI is:[%f], Distance is:[%f], Angle is:[%f] \n", Goal[i].GoalCount, i+1, Goal[i].Center.x, Goal[i].Center.y, Goal[i].PointOfAim, Goal[i].Distance, Goal[i].Angle);
+	}
+}
+
+void SendRobotDataUDP()
+{
+
+}
+
+void Write_csv(Report Goal[], ofstream &output)
+{
+	//int i=1;
+	//Point cell;
+
+	//int sizeOfArray=int(Goal);// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
+
+}
+
+void ModifyRGB(float intensity, bool reduceR, bool reduceG,  bool reduceB, Mat &input)
+{
+	for(int row = 0; row < 1; row++)
+	{
+		for(int col = 0; col < 1; col++)
+		{
+			if(reduceB)
+			{
+			cout<< input.at<Vec3i>(col, row)[2048];
+			}
+//			if(reduceG)
+//			{
+//				input.at<Vec3i>(col, row)[1] /= intensity;
+//			}
+//			if(reduceR)
+//			{
+//				input.at<Vec3i>(col, row)[2] /= intensity;
+//			}
+		}
+	}
+	imwrite(RGBModImage, input);
 }
