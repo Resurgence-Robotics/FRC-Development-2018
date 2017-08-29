@@ -127,7 +127,7 @@ int main()
 		//frame= Stream.grab();// from usb, grab a frame if new frame is available
 		frame= Original;// from filesystem
 		//modify RGB
-		// ModifyRGB(0.05, true, false, true, frame);
+		ModifyRGB(0.0, true, false, true, frame);
 		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
@@ -234,22 +234,27 @@ void Write_csv(Report Goal[], ofstream &output)
 
 void ModifyRGB(float intensity, bool reduceR, bool reduceG,  bool reduceB, Mat &input)
 {
-	for(int row = 0; row < 1; row++)
+	printf("cols: %i, rows: %i \n", input.cols,input.rows);
+	for(int row = 0; row <=Y_IMAGE_RES; row++)
 	{
-		for(int col = 0; col < 1; col++)
+		for(int col = 0; col <= X_IMAGE_RES; col++)
 		{
-			if(reduceB)
+			for(int color=0;color<3;color++ )//DID IT TO ALL 3 COLORS JUST FOR THE LOLS
 			{
-			cout<< input.at<Vec3i>(col, row)[2048];
+
+					int value = input.at<Vec3i>(row, col)[color];
+					value=rint(value*intensity);
+					printf("%i,%i,%i \n",row, col, value );
 			}
 //			if(reduceG)
 //			{
-//				input.at<Vec3i>(col, row)[1] /= intensity;
+//				input.at<Vec3i>(row, col)[1] /= intensity;
 //			}
 //			if(reduceR)
 //			{
-//				input.at<Vec3i>(col, row)[2] /= intensity;
+//				input.at<Vec3i>(row, col)[2] /= intensity;
 //			}
+
 		}
 	}
 	imwrite(RGBModImage, input);
