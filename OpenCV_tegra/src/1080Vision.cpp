@@ -52,9 +52,9 @@ ofstream LOGFILE("LOG.csv");
 #define XMINSIZE 24
 #define YMAXSIZE 600
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
-double Hue[] {0, 180};
-double Sat[] {0, 162};
-double Val[] {137, 255};
+double Hue[] {0, 94};
+double Sat[] {0, 114};
+double Val[] {216, 255};
 double minArea = 300.0;
 double minPerimeter = 0.0;
 double minWidth = 0.0;
@@ -128,7 +128,7 @@ int main()
 		Stream.retrieve(frame);// from usb, grab a frame if new frame is available
 		//frame= Original;// from filesystem
 		//modify RGB
-
+		imshow("one",frame);
 		//ModifyRGB(0.0, true, false, true, frame);
 		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// 1 channel binary
@@ -143,11 +143,12 @@ int main()
 	//calculate and score object
 		Report GoalReport[Goals.size()];
 		GenerateTargetReport(Goals, GoalReport,frame);
+		imshow("final image", frame);
 	//report via UDP and CSV
 		//csv
 		Write_csv(GoalReport,LOGFILE);
 		usleep(0.1);//10 times a second
-		//waitKey();// waits to exit program until we have pressed a key
+		waitKey(1);// waits to exit program until we have pressed a key
 	}
 	return 0;
 }
