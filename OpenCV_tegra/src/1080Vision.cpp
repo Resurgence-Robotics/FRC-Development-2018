@@ -47,6 +47,7 @@ ofstream LOGFILE("LOG.csv");
 //Edge profile constants of our shape
 #define Twidth 2 //in
 #define Theight 5 //in
+#define Tarea Twidth*Theight
 #define XMAXSIZE 300
 #define XMINSIZE 24
 #define YMAXSIZE 600
@@ -123,13 +124,14 @@ int main()
 	{
 
 	//Grab Image
-		Mat frame(X_IMAGE_RES, Y_IMAGE_RES,CV_CN_MAX);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
-		//frame= Stream.grab();// from usb, grab a frame if new frame is available
-		frame= Original;// from filesystem
+		Mat frame(Y_IMAGE_RES, X_IMAGE_RES, CV_8UC3);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
+		Stream.retrieve(frame);// from usb, grab a frame if new frame is available
+		//frame= Original;// from filesystem
 		//modify RGB
-		ModifyRGB(0.0, true, false, true, frame);
+
+		//ModifyRGB(0.0, true, false, true, frame);
 		//HSV filter
-		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);// 1 channel binary
+		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
 	//identify contours
 		ShapeArray contours; //created empty vector
@@ -144,9 +146,8 @@ int main()
 	//report via UDP and CSV
 		//csv
 		Write_csv(GoalReport,LOGFILE);
-
-	//	waitKey();// waits to exit program until we have pressed a key
-		break;
+		usleep(0.1);//10 times a second
+		//waitKey();// waits to exit program until we have pressed a key
 	}
 	return 0;
 }
@@ -203,6 +204,11 @@ void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
 void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals)
 {
 	int sizeOfArray=int(input.size());// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
+	if(sizeOfArray==0)
+	{
+		printf("0 goal(s), \n");
+		return;
+	}
 	for(int i=0; i<sizeOfArray; i++)
 	{
 		Rect bb = boundingRect(input[i]);
@@ -214,8 +220,9 @@ void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals)
 		Goal[i].PointOfAim = Map(Goal[i].Center.x,0,X_IMAGE_RES,-1,1);
 		Goal[i].Distance = (Theight / (tan(bb.height * (VIEW_ANGLE_Y / Y_IMAGE_RES) * (3.14159 / 180))));
 		Goal[i].Angle = acos(2.0 * (Goal[i].Distance * (tan(float(bb.width) * (float(VIEW_ANGLE_X) / float(X_IMAGE_RES)) * (3.14159 / float(180)))/2)) / float(Twidth / 2));
-		printf("%i goals, Goal[%i] Center is: [%i,%i], POI is:[%f], Distance is:[%f], Angle is:[%f] \n", Goal[i].GoalCount, i+1, Goal[i].Center.x, Goal[i].Center.y, Goal[i].PointOfAim, Goal[i].Distance, Goal[i].Angle);
+		printf("%i goal(s), Goal[%i] Center is: [%i,%i], POI is:[%f], Distance is:[%f], Angle is:[%f] \n", Goal[i].GoalCount, i+1, Goal[i].Center.x, Goal[i].Center.y, Goal[i].PointOfAim, Goal[i].Distance, Goal[i].Angle);
 	}
+
 }
 
 void SendRobotDataUDP()
