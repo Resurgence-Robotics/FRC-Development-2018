@@ -134,7 +134,6 @@
 			<resource resourceType="PROJECT" workspacePath="/OpenCV_tegra"/>
 		</configuration>
 	</storageModule>
-	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="scannerConfiguration">
 		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
 		<scannerConfigBuildInfo instanceId="cdt.managedbuild.config.gnu.mingw.exe.release.1608834240;cdt.managedbuild.config.gnu.mingw.exe.release.1608834240.;cdt.managedbuild.tool.gnu.c.compiler.mingw.exe.release.939573335;cdt.managedbuild.tool.gnu.c.compiler.input.1065793455">
@@ -157,4 +156,7 @@
 		</scannerConfigBuildInfo>
 	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
+	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets">
+		<buildTargets/>
+	</storageModule>
 </cproject>

@@ -11,10 +11,11 @@
 #include <iostream>	//
 #include <sstream>	//
 #include <unistd.h>	//
-#include <math.h>
+#include <math.h>	//
 //opencv includes
 #include <opencv2/opencv.hpp>// all C++ libs for opencv algorithms
-
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 using namespace cv;
 using namespace std;
 
@@ -30,7 +31,6 @@ using namespace std;
 #define Y_IMAGE_RES 320
 #define VIEW_ANGLE_X 61		//MICROSOFT LIFECAM HD-5000
 #define VIEW_ANGLE_Y 34.3	//MICROSOFT LIFECAM HD-5000
-//#define VIEW_ANGLE 43.5  //Axis M1011 camera -- OUR IP CAM FROM KOP
 //image locations
 #define CAM_ID 0 // usb camera
 #define CAM_IP 10.10.80.250 // ip camera
@@ -43,28 +43,25 @@ string filteredImage("Samples/FilteredImage.png");
 ofstream LOGFILE("LOG.csv");
 //CLASSIFICATION OF THE OBJECT WE ARE PROCESSING used for target identification
 //							*** units = pixel ***
-#define ASPECT_RATIO_CONST 2.75 // FOR RECTANGULAR OBJECTS ONLY, TARGET WIDTH TO HIGHT RATIO
 //Edge profile constants of our shape
 #define Twidth 2 //in
 #define Theight 5 //in
-#define Tarea Twidth*Theight
-#define XMAXSIZE 300
-#define XMINSIZE 24
-#define YMAXSIZE 600
+#define TRatio Twidth/Theight
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
-double Hue[] {0, 94};
-double Sat[] {0, 114};
-double Val[] {216, 255};
-double minArea = 300.0;
+int thresh = 100;
+int Hue[] {0,80};
+int Sat[] {40,255};
+int Val[] {90, 255};
+int minArea = 20.0;//play with this
 double minPerimeter = 0.0;
 double minWidth = 0.0;
 double maxWidth = 1000.0;
 double minHeight = 0.0;
 double maxHeight = 1000.0;
-double solidity[] = {20, 100};
+double solidity[] = {0, 1000};
 double maxVertices = 1000000.0;
-double minVertices = 0.0;
-double minRatio = 0.0;
+double minVertices = 4;//play with this
+double minRatio = 0.5;//play with this, should be more than .25, less than 1
 double maxRatio = 1000.0;
 
 typedef vector<vector<Point> > ShapeArray; //  an array of contours that make up a shape[1],[2] = [(x,y), (x,y)...], [(x,y), (x,y)...]
@@ -100,14 +97,12 @@ struct Report
 	double PointOfAim;
 };
 
-void HSVThreshold(Mat &input, Mat &output,double Hue[],double Sat[], double Val[]);//created above main so it can be used, but defined later to keep from using up space
-void GetContours(Mat &input, ShapeArray &contours);
+void HSVThreshold(Mat &input, Mat &output,int Hue[],int Sat[], int Val[]);//created above main so it can be used, but defined later to keep from using up space
+void GetContours(Mat &input, ShapeArray &contours, Mat &Output);
 void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage);
 void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals);
-void Write_csv( Report Goal[], ofstream &output);
-void ModifyRGB(float intensity, bool reduceR, bool reduceG,  bool reduceB, Mat &input);
-//void GlobalFieldPosition(ShapeArray &inputImage, float &GyroHeading, float &FieldX, float &FieldY);
 void SendRobotDataUDP();
+void thresh_callback(int, void* );
 int main()
 {
 	//create videostream object and image
@@ -119,7 +114,7 @@ int main()
 	//from image
 	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);
 	Original= imread(OriginalImage);// loads an image from the file
-
+	int FPSWait=20;
 	while(true)//change later to something like "while an image exists"
 	{
 
@@ -127,15 +122,13 @@ int main()
 		Mat frame(Y_IMAGE_RES, X_IMAGE_RES, CV_8UC3);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
 		Stream.retrieve(frame);// from usb, grab a frame if new frame is available
 		//frame= Original;// from filesystem
-		//modify RGB
-		imshow("one",frame);
-		//ModifyRGB(0.0, true, false, true, frame);
 		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
 	//identify contours
 		ShapeArray contours; //created empty vector
-		GetContours(HSVThresholdOutput, contours);
+		Mat ContoursOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
+		GetContours(HSVThresholdOutput, contours,ContoursOutput);
 	//Filter contours
 		ShapeArray Goals;
 		Mat FilteredOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
@@ -144,29 +137,41 @@ int main()
 		Report GoalReport[Goals.size()];
 		GenerateTargetReport(Goals, GoalReport,frame);
 		imshow("final image", frame);
-	//report via UDP and CSV
-		//csv
-		Write_csv(GoalReport,LOGFILE);
-		usleep(0.1);//10 times a second
-		waitKey(1);// waits to exit program until we have pressed a key
+		imshow("Binary Mask", ContoursOutput);
+		 /// Create Window
+		Mat BlackBox();
+		int max_thresh = 255;
+		char *source_window = "Source";
+		namedWindow( source_window, CV_WINDOW_AUTOSIZE );
+		//imshow( source_window, HSVThresholdOutput );
+		createTrackbar( " MaxHue:", "Source", &Hue[1], max_thresh);
+		createTrackbar( " MinHue:", "Source", &Hue[0], max_thresh);
+		createTrackbar( " MaxSat:", "Source", &Sat[1], max_thresh);
+		createTrackbar( " MinSat:", "Source", &Sat[0], max_thresh);
+		createTrackbar( " MaxVal:", "Source", &Val[1], max_thresh);
+		createTrackbar( " MinVal:", "Source", &Val[0], max_thresh);
+		createTrackbar( " FPSWait:", "Source", &FPSWait, 250);
+		createTrackbar( " MinArea:", "Source", &minArea, 500);
+		waitKey(FPSWait);// waits to exit program until we have pressed a key
 	}
 	return 0;
 }
 
-void HSVThreshold(Mat &input, Mat &output, double Hue[], double Sat[], double Val[])// this function uses an input and output givin by the user allowing major flexibility
+void HSVThreshold(Mat &input, Mat &output, int Hue[], int Sat[], int Val[])// this function uses an input and output givin by the user allowing major flexibility
 {
 	cvtColor(input,output,COLOR_BGR2HSV);// convert the image from color image channles to 2 channel HSV "black white", binary
 	inRange(output, Scalar(Hue[0],Sat[0],Val[0]),Scalar(Hue[1],Sat[1],Val[1]),output);
 	imwrite(HSVfilteredImage,output);// create a new image to show the processing worked
 }
 
-void GetContours(Mat &input, ShapeArray &contours)
+void GetContours(Mat &input, ShapeArray &contours, Mat &output)
 {
 	Mat CannyOutput;
 	Canny(input, CannyOutput, X_IMAGE_RES, Y_IMAGE_RES);
 	vector<Vec4i> hierarchy;
 	findContours(CannyOutput, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 	imwrite(ContoursImage, CannyOutput);
+	output=CannyOutput;
 }
 
 void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
@@ -231,39 +236,7 @@ void SendRobotDataUDP()
 
 }
 
-void Write_csv(Report Goal[], ofstream &output)
+void thresh_callback(int, void* )
 {
-	//int i=1;
-	//Point cell;
 
-	//int sizeOfArray=int(Goal);// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
-
-}
-
-void ModifyRGB(float intensity, bool reduceR, bool reduceG,  bool reduceB, Mat &input)
-{
-	printf("cols: %i, rows: %i \n", input.cols,input.rows);
-	for(int row = 0; row <=Y_IMAGE_RES; row++)
-	{
-		for(int col = 0; col <= X_IMAGE_RES; col++)
-		{
-			for(int color=0;color<3;color++ )//DID IT TO ALL 3 COLORS JUST FOR THE LOLS
-			{
-
-					int value = input.at<Vec3i>(row, col)[color];
-					value=rint(value*intensity);
-					printf("%i,%i,%i \n",row, col, value );
-			}
-//			if(reduceG)
-//			{
-//				input.at<Vec3i>(row, col)[1] /= intensity;
-//			}
-//			if(reduceR)
-//			{
-//				input.at<Vec3i>(row, col)[2] /= intensity;
-//			}
-
-		}
-	}
-	imwrite(RGBModImage, input);
 }
