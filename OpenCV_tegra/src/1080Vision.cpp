@@ -1,10 +1,4 @@
 #include <sys/types.h>
-#ifdef __WIN32__
-# include <winsock2.h>// windows
-#else
-# include <sys/socket.h>// linux
-#endif
-//system includes
 #include <stdio.h>	//
 #include <stdlib.h>	//
 #include <string> 	//
@@ -16,11 +10,14 @@
 #include <opencv2/opencv.hpp>// all C++ libs for opencv algorithms
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
+// network tables
+#include "Socket.hpp"// handles cross platform issues
+
 using namespace cv;
 using namespace std;
 
 /*
- * 1080Vision.cpp
+ *  1080Vision.cpp
  *	Author: 1080 Resurgence Robotics
  *  Created on: Jul 30, 2017
  */
@@ -28,13 +25,16 @@ using namespace std;
 // functions to override
 //Camera constants used for distance calculation
 #define X_IMAGE_RES 640		//X Image resolution in pixels, should be 160, 320 or 640 Y image resolution is double for 2:1 aspect ratio
-#define Y_IMAGE_RES 320
+#define Y_IMAGE_RES 360
 #define VIEW_ANGLE_X 61		//MICROSOFT LIFECAM HD-5000
 #define VIEW_ANGLE_Y 34.3	//MICROSOFT LIFECAM HD-5000
 //image locations
-#define CAM_ID 0 // usb camera
-#define CAM_IP 10.10.80.250 // ip camera
-string WebServer("roboRIO-1080-FRC.local");
+//#define CAM_ID 0 // usb camera
+#define CAM_IP 10.10.80.25 // ip camera
+int CAM_ID = 0;
+bool camSuccess = false;
+string RoborioDHCP("roboRIO-1080-FRC.local");
+string TegraDHCP("tegra-ubuntu.local");
 string OriginalImage ("Samples/Original.png"); // test sample images
 string RGBModImage("Samples/RGBModImage.png");
 string HSVfilteredImage ("Samples/HSVThresholdOutput.png");
@@ -49,19 +49,19 @@ ofstream LOGFILE("LOG.csv");
 #define TRatio Twidth/Theight
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
 int thresh = 100;
-int Hue[] {0,80};
-int Sat[] {40,255};
-int Val[] {90, 255};
+int Hue[] {120, 150};
+int Sat[] {0, 100};
+int Val[] {0, 255};
 int minArea = 20.0;//play with this
 double minPerimeter = 0.0;
 double minWidth = 0.0;
 double maxWidth = 1000.0;
 double minHeight = 0.0;
 double maxHeight = 1000.0;
-double solidity[] = {0, 1000};
+int solidity[] = {0, 1000};
 double maxVertices = 1000000.0;
-double minVertices = 4;//play with this
-double minRatio = 0.5;//play with this, should be more than .25, less than 1
+double minVertices = 0;//play with this
+int minRatio = 50;//play with this, should be more than .25, less than 1 (each increment is a hundredth)
 double maxRatio = 1000.0;
 
 typedef vector<vector<Point> > ShapeArray; //  an array of contours that make up a shape[1],[2] = [(x,y), (x,y)...], [(x,y), (x,y)...]
@@ -97,31 +97,66 @@ struct Report
 	double PointOfAim;
 };
 
+void ReduceBrightness(Mat &input, Mat &output, int factor);
 void HSVThreshold(Mat &input, Mat &output,int Hue[],int Sat[], int Val[]);//created above main so it can be used, but defined later to keep from using up space
 void GetContours(Mat &input, ShapeArray &contours, Mat &Output);
 void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage);
-void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals);
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, char &Output);
 void SendRobotDataUDP();
 void thresh_callback(int, void* );
+void AVGSample(int count,int raw, int &avg);
+
+
+
+
 int main()
 {
 	//create videostream object and image
 	// from stream
 	VideoCapture Stream;
-	Stream= VideoCapture(CAM_ID);//starts a camera stream
+	Stream = VideoCapture(CAM_ID);//starts a camera stream
 	Stream.set(CV_CAP_PROP_FRAME_WIDTH, X_IMAGE_RES);
 	Stream.set(CV_CAP_PROP_FRAME_HEIGHT, Y_IMAGE_RES);
 	//from image
 	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);
 	Original= imread(OriginalImage);// loads an image from the file
 	int FPSWait=20;
-	while(true)//change later to something like "while an image exists"
-	{
 
+	//open a server socket for networking our application
+	int client, server;
+	int portNum=1500;
+	bool isExit = false;
+	int bufsize = 1024;
+	char buffer[bufsize];
+	struct sockaddr_in server_addr;
+	typedef int socklen_t;
+	socklen_t size;
+	client =socket(AF_INET, SOCK_STREAM,0);
+	if(client<0){  cout<<"error establishing server"<<endl; exit(1);  }
+	cout<<"Server Initialized"<<endl;
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_addr.s_addr = htons(INADDR_ANY);
+	server_addr.sin_port =htons(portNum);
+	if(bind(client, ( struct sockaddr*) &server_addr, sizeof(server_addr))<0 ){  cout<<"error binding"<<endl; exit(1);   }
+	size =sizeof(server_addr);
+	cout<<"listining for clients"<<endl;
+	listen(client,1);
+	server = accept( client,(struct sockaddr*) &server_addr, &size );
+	if(server<0){  cout<<"client rejected"<<endl; exit(1);  }
+
+	while(server>0)
+	{
+		strcpy(buffer, "server connected... \n");
+
+
+		int64 start = cv::getTickCount();
 	//Grab Image
-		Mat frame(Y_IMAGE_RES, X_IMAGE_RES, CV_8UC3);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
-		Stream.retrieve(frame);// from usb, grab a frame if new frame is available
-		//frame= Original;// from filesystem
+		printf("Final Camera ID %i/n", CAM_ID);
+		Mat frame(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
+		//Stream.retrieve(frame);// from usb, grab a frame if new frame is available
+		frame= Original;// from filesystem
+		Mat darker(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);
+	//	ReduceBrightness(frame, darker, 0.5);
 		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
@@ -131,17 +166,21 @@ int main()
 		GetContours(HSVThresholdOutput, contours,ContoursOutput);
 	//Filter contours
 		ShapeArray Goals;
-		Mat FilteredOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
+	//	Mat FilteredOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
 		FilterContours(contours, Goals, frame);// returning image of different size?
 	//calculate and score object
 		Report GoalReport[Goals.size()];
-		GenerateTargetReport(Goals, GoalReport,frame);
-		imshow("final image", frame);
+		GenerateTargetReport(Goals, GoalReport,frame, *buffer);
+		int Rawfps =rint(cv::getTickFrequency() / (cv::getTickCount() - start));
+		//AVGSample(3, Rawfps, fps);
+		string Sfps= "FPS:" + std::to_string(Rawfps);
+		cv::putText(frame, Sfps, cvPoint(30,30), FONT_HERSHEY_COMPLEX_SMALL, 0.4, cvScalar(200,200,250), 1, CV_AA);
+		imshow("Final Image", frame);
 		imshow("Binary Mask", ContoursOutput);
+		imshow("HSV", HSVThresholdOutput);
 		 /// Create Window
-		Mat BlackBox();
 		int max_thresh = 255;
-		char *source_window = "Source";
+		char source_window[] = "Source";
 		namedWindow( source_window, CV_WINDOW_AUTOSIZE );
 		//imshow( source_window, HSVThresholdOutput );
 		createTrackbar( " MaxHue:", "Source", &Hue[1], max_thresh);
@@ -151,10 +190,42 @@ int main()
 		createTrackbar( " MaxVal:", "Source", &Val[1], max_thresh);
 		createTrackbar( " MinVal:", "Source", &Val[0], max_thresh);
 		createTrackbar( " FPSWait:", "Source", &FPSWait, 250);
-		createTrackbar( " MinArea:", "Source", &minArea, 500);
+		createTrackbar( " MinArea:", "Source", &minArea, 5000);
+		createTrackbar( " MinRatio:", "Source", &minRatio, 200);
+		createTrackbar( " MinSolid:", "Source", &solidity[0], 1000);
 		waitKey(FPSWait);// waits to exit program until we have pressed a key
+
+		send(server, buffer, bufsize,0);
 	}
 	return 0;
+}
+
+
+
+
+
+void ReduceBrightness(Mat &input, Mat &output, int factor)
+{
+//Mat new_image = Mat::zeros( input.size(), input.type() );
+	for(int i = 1; i < X_IMAGE_RES-1; i++)
+	{
+		usleep(1000);
+		for(int j = 1; j < Y_IMAGE_RES-1; j++)
+		{
+			for(int c=0; c < 3; c++)
+			{
+				//int value = int(input.at<Vec3i>(j,i)[c]);
+				//value = value*float(factor);
+				//cout << value << endl;
+				input.at<Vec3i>(j,i)[c] = 0;
+				printf("%i,%i,%i \n",i, j, c );
+
+			}
+
+		}
+
+	}
+	printf("--------------------------------------------------------------------------------------------------------------------\n");
 }
 
 void HSVThreshold(Mat &input, Mat &output, int Hue[], int Sat[], int Val[])// this function uses an input and output givin by the user allowing major flexibility
@@ -198,7 +269,7 @@ void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
 				if (solid < solidity[0] || solid > solidity[1]) continue;
 				if (store.size() < minVertices || store.size() > maxVertices)	continue;
 				double ratio = (double) bb.width / (double) bb.height;
-				if (ratio < minRatio || ratio > maxRatio) continue;
+				if (ratio < (minRatio/100) || ratio > maxRatio) continue;
 				output.push_back(store);
 				store.clear();
 
@@ -207,7 +278,7 @@ void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
 			imwrite(filteredImage, OutputImage);
 }
 
-void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals)
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, char &Output)
 {
 	int sizeOfArray=int(input.size());// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
 	if(sizeOfArray==0)
@@ -227,16 +298,27 @@ void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals)
 		Goal[i].Distance = (Theight / (tan(bb.height * (VIEW_ANGLE_Y / Y_IMAGE_RES) * (3.14159 / 180))));
 		Goal[i].Angle = acos(2.0 * (Goal[i].Distance * (tan(float(bb.width) * (float(VIEW_ANGLE_X) / float(X_IMAGE_RES)) * (3.14159 / float(180)))/2)) / float(Twidth / 2));
 		printf("%i goal(s), Goal[%i] Center is: [%i,%i], POI is:[%f], Distance is:[%f], Angle is:[%f] \n", Goal[i].GoalCount, i+1, Goal[i].Center.x, Goal[i].Center.y, Goal[i].PointOfAim, Goal[i].Distance, Goal[i].Angle);
+		string OUTPUT;
+		char dat =  Goal[i].GoalCount;
+		//TextOut<<0;
 	}
-
 }
 
-void SendRobotDataUDP()
-{
+void SendRobotDataUDP(){
 
 }
 
 void thresh_callback(int, void* )
 {
 
+}
+void AVGSample(int count,int raw, int &avg)
+{
+	int sample[]{};
+		int Average;
+		for(int i; i<count; i++){
+			sample[i]=raw;
+			Average =Average+sample[i];
+		}
+		avg=Average;
 }
