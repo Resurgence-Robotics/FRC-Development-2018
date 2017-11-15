@@ -1,3 +1,24 @@
+
+/*
+ *  1080Vision.cpp
+ *	Author: 1080 Resurgence Robotics
+ *  Created on: Jul 30, 2017
+ */
+
+#ifdef WIN32
+	#include <winsock.h>
+	#include <winsock2.h>
+	typedef int socklen_t;
+#else
+	#include <unistd.h>
+	#include <netdb.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	#include <netinet/in.h>
+	#include <arpa/inet.h>
+	#include <sys/wait.h>
+#endif
+
 #include <sys/types.h>
 #include <stdio.h>	//
 #include <stdlib.h>	//
@@ -6,23 +27,21 @@
 #include <sstream>	//
 #include <unistd.h>	//
 #include <math.h>	//
+#include <stdio.h>
 //opencv includes
 #include <opencv2/opencv.hpp>// all C++ libs for opencv algorithms
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 // network tables
-#include "Socket.hpp"// handles cross platform issues
+
 
 using namespace cv;
 using namespace std;
-
-/*
- *  1080Vision.cpp
- *	Author: 1080 Resurgence Robotics
- *  Created on: Jul 30, 2017
- */
+#define PORT 1086
+#define SO_REUSEPORT 15
 
 // functions to override
+
 //Camera constants used for distance calculation
 #define X_IMAGE_RES 640		//X Image resolution in pixels, should be 160, 320 or 640 Y image resolution is double for 2:1 aspect ratio
 #define Y_IMAGE_RES 360
@@ -35,6 +54,8 @@ int CAM_ID = 0;
 bool camSuccess = false;
 string RoborioDHCP("roboRIO-1080-FRC.local");
 string TegraDHCP("tegra-ubuntu.local");
+string CameraIP("http://10.10.80.12/mjpg/video.mjpg");
+//http://10.10.80.12/mjpg/video.mjpg
 string OriginalImage ("Samples/Original.png"); // test sample images
 string RGBModImage("Samples/RGBModImage.png");
 string HSVfilteredImage ("Samples/HSVThresholdOutput.png");
@@ -42,30 +63,33 @@ string ContoursImage ("Samples/ContoursImage.png");
 string filteredImage("Samples/FilteredImage.png");
 ofstream LOGFILE("LOG.csv");
 //CLASSIFICATION OF THE OBJECT WE ARE PROCESSING used for target identification
+
 //							*** units = pixel ***
+
 //Edge profile constants of our shape
 #define Twidth 2 //in
 #define Theight 5 //in
 #define TRatio Twidth/Theight
 // define the HSV threshold values for filtering our target //HSV threshold criteria array, ranges are in that order H-low-high, S-low-high, V-low-high
 int thresh = 100;
-int Hue[] {120, 150};
-int Sat[] {0, 100};
-int Val[] {0, 255};
-int minArea = 20.0;//play with this
+int Hue[] {50, 205};
+int Sat[] {0, 222};
+int Val[] {145, 255};
+int minArea = 142;//play with this
 double minPerimeter = 0.0;
 double minWidth = 0.0;
 double maxWidth = 1000.0;
 double minHeight = 0.0;
 double maxHeight = 1000.0;
-int solidity[] = {0, 1000};
+int solidity[] = {70, 1000};
 double maxVertices = 1000000.0;
 double minVertices = 0;//play with this
-int minRatio = 50;//play with this, should be more than .25, less than 1 (each increment is a hundredth)
+int minRatio = 16;//play with this, should be more than .25, less than 1 (each increment is a hundredth)
 double maxRatio = 1000.0;
 
 typedef vector<vector<Point> > ShapeArray; //  an array of contours that make up a shape[1],[2] = [(x,y), (x,y)...], [(x,y), (x,y)...]
 typedef vector<Point> Points;// an Array of continuous points that form a single contour [1],[2]= [x,y],[x,y]
+
 
 float Map(float x, float in_min, float in_max, float out_min, float out_max)
 {
@@ -101,7 +125,7 @@ void ReduceBrightness(Mat &input, Mat &output, int factor);
 void HSVThreshold(Mat &input, Mat &output,int Hue[],int Sat[], int Val[]);//created above main so it can be used, but defined later to keep from using up space
 void GetContours(Mat &input, ShapeArray &contours, Mat &Output);
 void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage);
-void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, char &Output);
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, string &DataWord);
 void SendRobotDataUDP();
 void thresh_callback(int, void* );
 void AVGSample(int count,int raw, int &avg);
@@ -111,52 +135,53 @@ void AVGSample(int count,int raw, int &avg);
 
 int main()
 {
-	//create videostream object and image
-	// from stream
+
+//establish socket
+//	int server, client, valread, c;
+//	struct sockaddr_in address;
+//	char buffer[1024] = {0};
+//	if ((server = socket(AF_INET, SOCK_STREAM, 0)) == 0) { perror("socket failed"); /*exit(EXIT_FAILURE);*/ }
+//	address.sin_family = AF_INET;
+//	address.sin_addr.s_addr = INADDR_ANY;
+//	address.sin_port = htons( PORT );
+//	if (bind(server, (struct sockaddr *)&address, sizeof(address))<0) { perror("bind failed"); /*exit(EXIT_FAILURE);*/ }
+//	if (listen(server, 3) < 0){ perror("listen"); /*exit(EXIT_FAILURE);*/ }
+//	if ((client = accept(server, (struct sockaddr *)&address, (socklen_t*) &c  ))<0) { perror("accept"); /*exit(EXIT_FAILURE);*/ }
+//	valread = recv( client , buffer, 1024,0);
+//create videostream object and image
+// from stream
 	VideoCapture Stream;
-	Stream = VideoCapture(CAM_ID);//starts a camera stream
+	Stream = VideoCapture(0);//starts a camera stream
+	if(Stream.open(0)== false)
+	{
+		printf("unable to open stream");
+		exit(EXIT_FAILURE);
+	}
+
 	Stream.set(CV_CAP_PROP_FRAME_WIDTH, X_IMAGE_RES);
 	Stream.set(CV_CAP_PROP_FRAME_HEIGHT, Y_IMAGE_RES);
 	//from image
 	Mat Original(X_IMAGE_RES, Y_IMAGE_RES, CV_CN_MAX);
 	Original= imread(OriginalImage);// loads an image from the file
 	int FPSWait=20;
-
-	//open a server socket for networking our application
-	int client, server;
-	int portNum=1500;
-	bool isExit = false;
-	int bufsize = 1024;
-	char buffer[bufsize];
-	struct sockaddr_in server_addr;
-	typedef int socklen_t;
-	socklen_t size;
-	client =socket(AF_INET, SOCK_STREAM,0);
-	if(client<0){  cout<<"error establishing server"<<endl; exit(1);  }
-	cout<<"Server Initialized"<<endl;
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_addr.s_addr = htons(INADDR_ANY);
-	server_addr.sin_port =htons(portNum);
-	if(bind(client, ( struct sockaddr*) &server_addr, sizeof(server_addr))<0 ){  cout<<"error binding"<<endl; exit(1);   }
-	size =sizeof(server_addr);
-	cout<<"listining for clients"<<endl;
-	listen(client,1);
-	server = accept( client,(struct sockaddr*) &server_addr, &size );
-	if(server<0){  cout<<"client rejected"<<endl; exit(1);  }
-
-	while(server>0)
+//begin program
+	while(true)
 	{
-		strcpy(buffer, "server connected... \n");
 
-
+		string DataWord;
 		int64 start = cv::getTickCount();
 	//Grab Image
-		printf("Final Camera ID %i/n", CAM_ID);
+		//printf("Final Camera ID %i/n", CAM_ID);
 		Mat frame(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// create a matrix of pixil data called frame THAT MATCHES CAMERA RESOLUTION
-		//Stream.retrieve(frame);// from usb, grab a frame if new frame is available
-		frame= Original;// from filesystem
-		Mat darker(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);
-	//	ReduceBrightness(frame, darker, 0.5);
+		Stream.retrieve(frame);// from usb, grab a frame if new frame is available
+		if(Stream.read(frame)==false)
+		{
+			printf("unable to connect to camera");
+			exit(EXIT_FAILURE);
+		}
+		imshow("Captured image", frame);
+
+		//frame= Original;// from filesystem
 		//HSV filter
 		Mat HSVThresholdOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC3);// 1 channel binary
 		HSVThreshold(frame, HSVThresholdOutput,Hue,Sat,Val);// each step of the process should be like this
@@ -165,37 +190,60 @@ int main()
 		Mat ContoursOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
 		GetContours(HSVThresholdOutput, contours,ContoursOutput);
 	//Filter contours
-		ShapeArray Goals;
-	//	Mat FilteredOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
-		FilterContours(contours, Goals, frame);// returning image of different size?
-	//calculate and score object
-		Report GoalReport[Goals.size()];
-		GenerateTargetReport(Goals, GoalReport,frame, *buffer);
-		int Rawfps =rint(cv::getTickFrequency() / (cv::getTickCount() - start));
-		//AVGSample(3, Rawfps, fps);
-		string Sfps= "FPS:" + std::to_string(Rawfps);
-		cv::putText(frame, Sfps, cvPoint(30,30), FONT_HERSHEY_COMPLEX_SMALL, 0.4, cvScalar(200,200,250), 1, CV_AA);
-		imshow("Final Image", frame);
-		imshow("Binary Mask", ContoursOutput);
-		imshow("HSV", HSVThresholdOutput);
-		 /// Create Window
-		int max_thresh = 255;
-		char source_window[] = "Source";
-		namedWindow( source_window, CV_WINDOW_AUTOSIZE );
-		//imshow( source_window, HSVThresholdOutput );
-		createTrackbar( " MaxHue:", "Source", &Hue[1], max_thresh);
-		createTrackbar( " MinHue:", "Source", &Hue[0], max_thresh);
-		createTrackbar( " MaxSat:", "Source", &Sat[1], max_thresh);
-		createTrackbar( " MinSat:", "Source", &Sat[0], max_thresh);
-		createTrackbar( " MaxVal:", "Source", &Val[1], max_thresh);
-		createTrackbar( " MinVal:", "Source", &Val[0], max_thresh);
-		createTrackbar( " FPSWait:", "Source", &FPSWait, 250);
-		createTrackbar( " MinArea:", "Source", &minArea, 5000);
-		createTrackbar( " MinRatio:", "Source", &minRatio, 200);
-		createTrackbar( " MinSolid:", "Source", &solidity[0], 1000);
-		waitKey(FPSWait);// waits to exit program until we have pressed a key
 
-		send(server, buffer, bufsize,0);
+		ShapeArray Goals;
+		FilterContours(contours, Goals, frame);// returning image of different size?
+//calculate and score object
+		Report GoalReport[Goals.size()];
+		Mat TargetOutput(X_IMAGE_RES, Y_IMAGE_RES, CV_8UC1);
+		GenerateTargetReport(Goals, GoalReport, frame, DataWord);
+		//imshow("TargetOutput", TargetOutput);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//		//provide the user an interface=
+//		int Rawfps =rint(cv::getTickFrequency() / (cv::getTickCount() - start));
+//		string Sfps= "FPS:" + std::to_string(Rawfps);
+//		cv::putText(frame, Sfps, cvPoint(30,30), FONT_HERSHEY_COMPLEX_SMALL, 0.4, cvScalar(200,200,250), 1, CV_AA);
+		imshow("Final Image", frame);
+//		imshow("Binary Mask", ContoursOutput);
+//		imshow("HSV", HSVThresholdOutput);
+//	// Create Window
+//		int max_thresh = 255;
+//		char source_window[] = "Source";
+//		namedWindow( source_window, CV_WINDOW_AUTOSIZE );
+//	//Create Trackbars
+//		createTrackbar( " MaxHue:", "Source", &Hue[1], max_thresh);
+//		createTrackbar( " MinHue:", "Source", &Hue[0], max_thresh);
+//		createTrackbar( " MaxSat:", "Source", &Sat[1], max_thresh);
+//		createTrackbar( " MinSat:", "Source", &Sat[0], max_thresh);
+//		createTrackbar( " MaxVal:", "Source", &Val[1], max_thresh);
+//		createTrackbar( " MinVal:", "Source", &Val[0], max_thresh);
+//		createTrackbar( " FPSWait:", "Source", &FPSWait, 250);
+//		createTrackbar( " MinArea:", "Source", &minArea, 5000);
+//		createTrackbar( " MinRatio:", "Source", &minRatio, 200);
+//		createTrackbar( " MinSolid:", "Source", &solidity[0], 1000);
+		waitKey(FPSWait);// waits to exit program until we have pressed a key
+//	//build word to send
+//		char *data = new char[DataWord.length() + 1];
+//		strcpy(data, DataWord.c_str());
+//		printf("%c",data);
+//	//send word over network
+//		send(client , data , strlen(data) , 0 );
 	}
 	return 0;
 }
@@ -278,12 +326,12 @@ void FilterContours(ShapeArray &input, ShapeArray &output, Mat &OutputImage )
 			imwrite(filteredImage, OutputImage);
 }
 
-void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, char &Output)
+void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, string &DataWord)
 {
 	int sizeOfArray=int(input.size());// cast to signed int and subtract 1 to prevent using a number outside the scope of the array
 	if(sizeOfArray==0)
 	{
-		printf("0 goal(s), \n");
+		//printf("0 goal(s), \n");
 		return;
 	}
 	for(int i=0; i<sizeOfArray; i++)
@@ -297,10 +345,9 @@ void GenerateTargetReport(ShapeArray &input, Report Goal[], Mat &FilteredGoals, 
 		Goal[i].PointOfAim = Map(Goal[i].Center.x,0,X_IMAGE_RES,-1,1);
 		Goal[i].Distance = (Theight / (tan(bb.height * (VIEW_ANGLE_Y / Y_IMAGE_RES) * (3.14159 / 180))));
 		Goal[i].Angle = acos(2.0 * (Goal[i].Distance * (tan(float(bb.width) * (float(VIEW_ANGLE_X) / float(X_IMAGE_RES)) * (3.14159 / float(180)))/2)) / float(Twidth / 2));
-		printf("%i goal(s), Goal[%i] Center is: [%i,%i], POI is:[%f], Distance is:[%f], Angle is:[%f] \n", Goal[i].GoalCount, i+1, Goal[i].Center.x, Goal[i].Center.y, Goal[i].PointOfAim, Goal[i].Distance, Goal[i].Angle);
-		string OUTPUT;
-		char dat =  Goal[i].GoalCount;
-		//TextOut<<0;
+		printf("%i goal(s), Goal[%i] POI is:[%f], Distance is:[%f] \n", Goal[i].GoalCount,i+1, Goal[i].PointOfAim, Goal[i].Distance);
+
+
 	}
 }
 
