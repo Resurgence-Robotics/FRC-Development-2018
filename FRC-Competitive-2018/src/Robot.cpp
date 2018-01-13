@@ -5,10 +5,12 @@
 #include <SampleRobot.h>
 #include <SmartDashboard/SendableChooser.h>
 #include <SmartDashboard/SmartDashboard.h>
+
 #include <Timer.h>
 #include <wpilib.h>
 #include <Math.h>
 #include <ctre/Phoenix.h>
+#include <ctre/phoenix/MotorControl/ControlMode.h>
 
 class Robot : public frc::SampleRobot {
 
@@ -54,8 +56,8 @@ public:
 
 		//Lift
 		lift0(12),
-		limTop(0),
-		limBottom(1),
+		limTop(6),
+		limBottom(7),
 
 		//Intake
 		intake0(13),
@@ -75,12 +77,33 @@ public:
 	}
 
 	void Autonomous() {
-
+		while(IsEnabled() && IsAutonomous()){
+			/*
+			printf("\nPreset Encoder value: %i", encLeft->Get());
+			encLeft->Reset();
+			printf("\nPostset Encoder value: %i", encLeft->Get());
+			Wait(1);
+			left1.Set(ControlMode::PercentOutput, 0.0);
+			printf("\nPost Run Encoder value: %i", encLeft->Get());
+			Wait(1);
+			*/
+			printf("\nPreset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+			left1.GetSensorCollection().SetQuadraturePosition(0, 1000);
+			printf("\nPostset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+			Wait(1);
+			left1.Set(ControlMode::Position, 1250);
+			Wait(1);
+			printf("\nPost Run Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+			Wait(1);
+		}
 	}
 
 
 	void OperatorControl() override {
-
+		while(IsOperatorControl() && IsEnabled()){
+			printf("\nIs Lacey useful: %d", limTop.Get());
+			Wait(1);
+		}
 	}
 
 
