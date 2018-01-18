@@ -11,6 +11,8 @@
 #include <Math.h>
 #include <ctre/Phoenix.h>
 #include <ctre/phoenix/MotorControl/ControlMode.h>
+#include <ctre/phoenix/MotorControl/NeutralMode.h>
+#include <ctre/phoenix/MotorControl/FeedbackDevice.h>
 
 class Robot : public frc::SampleRobot {
 
@@ -73,7 +75,19 @@ public:
 	}
 
 	void RobotInit() {
+		left0.SetNeutralMode(NeutralMode::Coast);
+		left1.SetNeutralMode(NeutralMode::Coast);
+		right0.SetNeutralMode(NeutralMode::Coast);
+		right1.SetNeutralMode(NeutralMode::Coast);
+		lift0.SetNeutralMode(NeutralMode::Coast);
+		intake0.SetNeutralMode(NeutralMode::Coast);
+		intake1.SetNeutralMode(NeutralMode::Coast);
 
+		//left1.Set(ControlMode::Follower, 8);
+		right1.Set(ControlMode::Follower, 10);
+
+		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 	}
 
 	void Autonomous() {
@@ -103,6 +117,8 @@ public:
 		while(IsOperatorControl() && IsEnabled()){
 			printf("\nIs Lacey useful: %d", limTop.Get());
 			Wait(1);
+
+			SmartDashboard::PutNumber("Encoder", left1.GetSensorCollection().GetQuadraturePosition());
 		}
 	}
 
