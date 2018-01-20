@@ -16,9 +16,12 @@
 
 class Robot : public frc::SampleRobot {
 
+	//System Constants
+	const double THRESHOLD = 0.1;
+	
 	//Control System
-	Joystick stick0;
-	Joystick stick1;
+	Joystick *stick0;
+	Joystick *stick1;
 	PowerDistributionPanel* m_pdp;
 
 	//Drivetrain
@@ -45,14 +48,10 @@ class Robot : public frc::SampleRobot {
 
 public:
 	Robot():
-		//Control System
-		stick0(0),
-		stick1(1),
-
 		//Drivetrain
 		left0(8),
-		left1(9),
-		right0(10),
+		left1(10),
+		right0(9),
 		right1(11),
 
 
@@ -68,6 +67,8 @@ public:
 		//Manipulator
 		clamp(0, 1)
 	{
+		stick0 = new Joystick(0);
+		stick1 = new Joystick(1);
 		m_pdp = new PowerDistributionPanel(),
 		encLeft = new Encoder(0, 1, true, Encoder::EncodingType::k4X);
 		encRight = new Encoder(2, 3, true, Encoder::EncodingType::k4X);
@@ -83,7 +84,7 @@ public:
 		intake0.SetNeutralMode(NeutralMode::Coast);
 		intake1.SetNeutralMode(NeutralMode::Coast);
 
-		//left1.Set(ControlMode::Follower, 8);
+		left1.Set(ControlMode::Follower, 8);
 		right1.Set(ControlMode::Follower, 10);
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
@@ -114,11 +115,32 @@ public:
 
 
 	void OperatorControl() override {
-		while(IsOperatorControl() && IsEnabled()){
-			printf("\nIs Lacey useful: %d", limTop.Get());
-			Wait(1);
+		double left;
+		double right;
 
-			SmartDashboard::PutNumber("Encoder", left1.GetSensorCollection().GetQuadraturePosition());
+		while(IsEnabled() && IsOperatorControl()){
+			left = stick0->GetY() - stick0->GetX();
+			right = stick0->GetY() + stick0->GetX();
+
+
+
+			if(abs(left) >= THRESHOLD){
+				left0.Set(ControlMode::PercentOutput, left);
+				left1.Set(ControlMode::PercentOutput, left);
+			}
+			else{
+				left0.Set(ControlMode::PercentOutput, 0);
+				left1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			if(abs(right) >= THRESHOLD){
+				right0.Set(ControlMode::PercentOutput, right);
+				right1.Set(ControlMode::PercentOutput, right);
+			}
+			else{
+				right0.Set(ControlMode::PercentOutput, 0);
+				right1.Set(ControlMode::PercentOutput, 0);
+			}
 		}
 	}
 

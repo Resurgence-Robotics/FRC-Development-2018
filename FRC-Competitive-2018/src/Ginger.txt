@@ -1,6 +1,5 @@
 #include <iostream>
 #include <string>
-#include <chrono>
 
 #include <Joystick.h>
 #include <SampleRobot.h>
@@ -16,8 +15,6 @@
 #include <ctre/phoenix/MotorControl/FeedbackDevice.h>
 #include <AHRS.h>
 
-typedef std::chrono::high_resolution_clock Clock;
-
 class Ginger : public frc::SampleRobot {
 	//System Constants
 	const int THRESHOLD = 0.1;
@@ -27,6 +24,7 @@ class Ginger : public frc::SampleRobot {
 
 	//Stick
 	Joystick *stick0;
+	Joystick *stick1;
 
 	//Motors
 	TalonSRX left0;
@@ -34,6 +32,10 @@ class Ginger : public frc::SampleRobot {
 	TalonSRX right0;
 	TalonSRX right1;
 	TalonSRX climber0;
+
+	//Added so David can use ginger as a test-bed
+	TalonSRX david0;
+	TalonSRX david1;
 
 	//Pneumatics
 	DoubleSolenoid clamp;
@@ -50,6 +52,9 @@ public:
 		right1(3),
 		climber0(4),
 
+		david0(6),
+		david1(7),
+
 		clamp(0, 4),
 		manipSecond(1, 5),
 		chute(2, 6),
@@ -60,6 +65,7 @@ public:
 
 	void RobotInit() {
 		stick0 = new Joystick(0);
+		stick1 = new Joystick(1);
 
 		ahrs = new AHRS(SerialPort::kMXP);
 
@@ -127,6 +133,9 @@ public:
 		}
 	}
 
+	void PIDTurn(int angle){
+
+	}
 
 	void Autonomous() {
 		ahrs->Reset();
@@ -199,6 +208,16 @@ public:
 			else{
 				chute.Set(DoubleSolenoid::Value::kReverse);
 			}
+
+			if(abs(stick1->GetY()) > THRESHOLD){
+				david0.Set(ControlMode::PercentOutput, stick1->GetY());
+				david1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else{
+				david0.Set(ControlMode::PercentOutput, 0);
+				david1.Set(ControlMode::PercentOutput, 0);
+			}
+
 
 			//Rotation
 			SmartDashboard::PutNumber("NavX Pitch", ahrs->GetPitch());
