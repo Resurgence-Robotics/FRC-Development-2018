@@ -84,11 +84,14 @@ public:
 		intake0.SetNeutralMode(NeutralMode::Coast);
 		intake1.SetNeutralMode(NeutralMode::Coast);
 
-		left1.Set(ControlMode::Follower, 8);
-		right1.Set(ControlMode::Follower, 10);
+		//left1.Set(ControlMode::Follower, 8);
+		//right1.Set(ControlMode::Follower, 10);
 
-		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
-		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		left0.SetInverted(true);
+		left1.SetInverted(true);
+
+		//left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		//right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 	}
 
 	void Autonomous() {
@@ -122,9 +125,23 @@ public:
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
 
+			/*
+			if(stick0->GetY() >= THRESHOLD || stick0->GetY() <= -THRESHOLD){
+				left0.Set(ControlMode::PercentOutput, stick0->GetY());
+				left1.Set(ControlMode::PercentOutput, stick0->GetY());
+				right0.Set(ControlMode::PercentOutput, stick0->GetY());
+				right1.Set(ControlMode::PercentOutput, stick0->GetY());
+			}
+			else{
+				left0.Set(ControlMode::PercentOutput, 0);
+				left1.Set(ControlMode::PercentOutput, 0);
+				right0.Set(ControlMode::PercentOutput, 0);
+				right1.Set(ControlMode::PercentOutput, 0);
+			}
+			*/
 
 
-			if(abs(left) >= THRESHOLD){
+			if(left >= THRESHOLD || left <= -THRESHOLD){
 				left0.Set(ControlMode::PercentOutput, left);
 				left1.Set(ControlMode::PercentOutput, left);
 			}
@@ -133,7 +150,7 @@ public:
 				left1.Set(ControlMode::PercentOutput, 0);
 			}
 
-			if(abs(right) >= THRESHOLD){
+			if(right >= THRESHOLD || right <= -THRESHOLD){
 				right0.Set(ControlMode::PercentOutput, right);
 				right1.Set(ControlMode::PercentOutput, right);
 			}
@@ -141,6 +158,7 @@ public:
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
+
 		}
 	}
 

@@ -52,7 +52,7 @@ public:
 		right1(3),
 		climber0(4),
 
-		david0(6),
+		david0(4),
 		david1(7),
 
 		clamp(0, 4),
@@ -133,8 +133,35 @@ public:
 		}
 	}
 
-	void PIDTurn(int angle){
 
+
+	//The reference I used: http://robotsforroboticists.com/pid-control/
+	void PIDTurn(int angle){
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.5;//Time in seconds each iteration of the loop should take
+
+		double kP;//Proportional Component's Tunable Value
+		double kI;//Integral Component's Tunable Value
+		double kD;//Derivative Component's Tunable Value
+
+		double error;
+		double output;
+
+		while(true){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			Wait(iterationTime);//Wait the iteration time
+		}
 	}
 
 	void Autonomous() {
@@ -211,7 +238,7 @@ public:
 
 			if(abs(stick1->GetY()) > THRESHOLD){
 				david0.Set(ControlMode::PercentOutput, stick1->GetY());
-				david1.Set(ControlMode::PercentOutput, stick1->GetY());
+				david1.Set(ControlMode::PercentOutput, -stick1->GetY());
 			}
 			else{
 				david0.Set(ControlMode::PercentOutput, 0);
