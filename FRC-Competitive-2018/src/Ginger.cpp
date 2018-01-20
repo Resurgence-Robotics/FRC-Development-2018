@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <chrono>
 
 #include <Joystick.h>
 #include <SampleRobot.h>
@@ -14,6 +15,8 @@
 #include <ctre/phoenix/MotorControl/NeutralMode.h>
 #include <ctre/phoenix/MotorControl/FeedbackDevice.h>
 #include <AHRS.h>
+
+typedef std::chrono::high_resolution_clock Clock;
 
 class Ginger : public frc::SampleRobot {
 	//System Constants
@@ -60,8 +63,8 @@ public:
 
 		ahrs = new AHRS(SerialPort::kMXP);
 
-		//left0.SetInverted(true);
-		//left1.SetInverted(true);
+		left0.SetInverted(true);
+		left1.SetInverted(true);
 
 		clamp.Set(DoubleSolenoid::Value::kOff);
 		manipSecond.Set(DoubleSolenoid::Value::kOff);
@@ -69,24 +72,106 @@ public:
 		manipFirst.Set(DoubleSolenoid::Value::kOff);
 	}
 
-	void Autonomous() {
-		while(IsEnabled() && IsAutonomous()){
+	void drive(double left, double right){
+		left0.Set(ControlMode::PercentOutput, left);
+		left1.Set(ControlMode::PercentOutput, left);
+		right0.Set(ControlMode::PercentOutput, right);
+		right1.Set(ControlMode::PercentOutput, right);
+	}
 
+	void basicTurn(int angle, int timeOut){//Clockwise is positive, AntiClockwise is negative. Probably pretty crap
+		double startPoint = ahrs->GetYaw();
+		double setPoint = startPoint + angle;
+		double acceptableError = 5;
+		double initialDiff = setPoint - startPoint;//Final - initial
+
+		double currentDiff;
+		double speed;
+		//double leftOut;
+		//double rightOut;
+
+		if(angle > 0){
+			while(!(ahrs->GetYaw() > setPoint - acceptableError && ahrs->GetYaw() < setPoint + acceptableError) && IsEnabled() && IsAutonomous()){//If the gyro is within acceptable error
+				currentDiff = setPoint - ahrs->GetYaw();//Final - Current
+
+				speed = (currentDiff / initialDiff) / 2;
+
+				drive(-speed, speed);
+
+				SmartDashboard::PutNumber("Start point", startPoint);
+				SmartDashboard::PutNumber("Set point", setPoint);
+				SmartDashboard::PutNumber("Initial Difference", initialDiff);
+				SmartDashboard::PutNumber("Current Difference", currentDiff);
+				SmartDashboard::PutNumber("Speed", speed);
+				SmartDashboard::PutNumber("NavX Yaw", ahrs->GetYaw());
+			}
+		}
+		else if(angle < 0){
+			while(!(ahrs->GetYaw() > setPoint - acceptableError && ahrs->GetYaw() < setPoint + acceptableError) && IsEnabled() && IsAutonomous()){//If the gyro is within acceptable error
+				currentDiff = setPoint - ahrs->GetYaw();//Final - Current
+
+				speed = (currentDiff / initialDiff) / 2;
+
+				drive(speed, -speed);
+
+				SmartDashboard::PutNumber("Start point", startPoint);
+				SmartDashboard::PutNumber("Set point", setPoint);
+				SmartDashboard::PutNumber("Initial Difference", initialDiff);
+				SmartDashboard::PutNumber("Current Difference", currentDiff);
+				SmartDashboard::PutNumber("Speed", speed);
+				SmartDashboard::PutNumber("NavX Yaw", ahrs->GetYaw());
+			}
+		}
+		else{
+			printf("You broke the turn function somehow");
 		}
 	}
 
 
+	void Autonomous() {
+		ahrs->Reset();
+
+		Wait(3);
+
+		left0.SetNeutralMode(NeutralMode::Brake);
+		left1.SetNeutralMode(NeutralMode::Brake);
+		right0.SetNeutralMode(NeutralMode::Brake);
+		right1.SetNeutralMode(NeutralMode::Brake);
+
+		basicTurn(90, 0);
+
+	}
+
+
 	void OperatorControl() override {
+		left0.SetNeutralMode(NeutralMode::Coast);
+		left1.SetNeutralMode(NeutralMode::Coast);
+		right0.SetNeutralMode(NeutralMode::Coast);
+		right1.SetNeutralMode(NeutralMode::Coast);
+
+		double left;
+		double right;
+
 		while(IsEnabled() && IsOperatorControl()){
-			if(abs(stick0->GetY()) >= THRESHOLD){
-				left0.Set(ControlMode::PercentOutput, stick0->GetY());
-				left1.Set(ControlMode::PercentOutput, stick0->GetY());
-				right0.Set(ControlMode::PercentOutput, stick0->GetY());
-				right1.Set(ControlMode::PercentOutput, stick0->GetY());
+			left = stick0->GetY() - stick0->GetX();
+			right = stick0->GetY() + stick0->GetX();
+
+
+
+			if(abs(left) >= THRESHOLD){
+				left0.Set(ControlMode::PercentOutput, left);
+				left1.Set(ControlMode::PercentOutput, left);
 			}
 			else{
 				left0.Set(ControlMode::PercentOutput, 0);
 				left1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			if(abs(right) >= THRESHOLD){
+				right0.Set(ControlMode::PercentOutput, right);
+				right1.Set(ControlMode::PercentOutput, right);
+			}
+			else{
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
