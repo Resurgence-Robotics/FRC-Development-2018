@@ -43,7 +43,9 @@ class Robot : public frc::SampleRobot {
 	TalonSRX intake1;
 
 	//Manipulator
-	DoubleSolenoid clamp;
+	//DoubleSolenoid clamp;
+
+	AnalogInput LV_MAX_Sonar;
 
 
 public:
@@ -65,7 +67,10 @@ public:
 		intake1(14),
 
 		//Manipulator
-		clamp(0, 1)
+	//	clamp(0, 1),
+
+		LV_MAX_Sonar(3)
+
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
@@ -74,7 +79,15 @@ public:
 		encRight = new Encoder(2, 3, true, Encoder::EncodingType::k4X);
 		encLift = new Encoder(4, 5, true, Encoder::EncodingType::k4X);
 	}
+	double SonarSensor()
+		{
+			double supplied_voltage =5;
+			double vi= 270/supplied_voltage;
+			double distance = LV_MAX_Sonar.GetAverageVoltage() * vi;
 
+		//	printf(" Distance:%f \n", LV_MAX_Sonar.GetVoltage());
+			return distance;//measured in inches
+		}
 	void RobotInit() {
 		left0.SetNeutralMode(NeutralMode::Coast);
 		left1.SetNeutralMode(NeutralMode::Coast);
@@ -122,6 +135,9 @@ public:
 		double right;
 
 		while(IsEnabled() && IsOperatorControl()){
+			float Sonar1 =SonarSensor();
+			printf("s: %f \n",Sonar1); //inches
+
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
 
@@ -135,6 +151,7 @@ public:
 			else{
 				left0.Set(ControlMode::PercentOutput, 0);
 				left1.Set(ControlMode::PercentOutput, 0);
+
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
@@ -158,12 +175,15 @@ public:
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
+			Wait(0.04);
 
 		}
 	}
 
 
-	void Test() override {}
+	void Test() override {
+
+	}
 
 private:
 

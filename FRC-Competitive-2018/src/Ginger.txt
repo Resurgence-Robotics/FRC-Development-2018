@@ -43,6 +43,8 @@ class Ginger : public frc::SampleRobot {
 	DoubleSolenoid chute;
 	DoubleSolenoid manipFirst;
 
+	AnalogInput LV_MAX_Sonar; //sonar sensor
+
 
 public:
 	Ginger():
@@ -58,7 +60,9 @@ public:
 		clamp(0, 4),
 		manipSecond(1, 5),
 		chute(2, 6),
-		manipFirst(3, 7)
+		manipFirst(3, 7),
+
+		LV_MAX_Sonar(3)
 	{
 
 	}
@@ -163,6 +167,15 @@ public:
 			Wait(iterationTime);//Wait the iteration time
 		}
 	}
+	double SonarSensor()
+	{
+		double supplied_voltage =5;
+		double vi= 270/supplied_voltage;
+		double distance = LV_MAX_Sonar.GetAverageVoltage() * vi;
+
+		//printf("\n Distance:%f", distance);
+		return distance;
+	}
 
 	void Autonomous() {
 		ahrs->Reset();
@@ -245,6 +258,8 @@ public:
 				david1.Set(ControlMode::PercentOutput, 0);
 			}
 
+			float Sonar1 =SonarSensor();
+			printf("s: %f \n",Sonar1);
 
 			//Rotation
 			SmartDashboard::PutNumber("NavX Pitch", ahrs->GetPitch());
