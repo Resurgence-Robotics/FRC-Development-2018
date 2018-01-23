@@ -88,6 +88,29 @@ public:
 		//	printf(" Distance:%f \n", LV_MAX_Sonar.GetVoltage());
 			return distance;//measured in inches
 		}
+	void Encoders()
+	{
+		while(IsEnabled() && IsAutonomous()){
+					/*
+					printf("\nPreset Encoder value: %i", encLeft->Get());
+					encLeft->Reset();
+					printf("\nPostset Encoder value: %i", encLeft->Get());
+					Wait(1);
+					left1.Set(ControlMode::PercentOutput, 0.0);
+					printf("\nPost Run Encoder value: %i", encLeft->Get());
+					Wait(1);
+					*/
+					printf("\nPreset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+					left1.GetSensorCollection().SetQuadraturePosition(0, 1000);
+					printf("\nPostset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+					Wait(1);
+					left1.Set(ControlMode::Position, 1250);
+					Wait(1);
+					printf("\nPost Run Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
+					Wait(1);
+				}
+
+	}
 	void RobotInit() {
 		left0.SetNeutralMode(NeutralMode::Coast);
 		left1.SetNeutralMode(NeutralMode::Coast);
@@ -107,26 +130,22 @@ public:
 		//right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 	}
 
-	void Autonomous() {
-		while(IsEnabled() && IsAutonomous()){
-			/*
-			printf("\nPreset Encoder value: %i", encLeft->Get());
-			encLeft->Reset();
-			printf("\nPostset Encoder value: %i", encLeft->Get());
-			Wait(1);
-			left1.Set(ControlMode::PercentOutput, 0.0);
-			printf("\nPost Run Encoder value: %i", encLeft->Get());
-			Wait(1);
-			*/
-			printf("\nPreset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
-			left1.GetSensorCollection().SetQuadraturePosition(0, 1000);
-			printf("\nPostset Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
-			Wait(1);
-			left1.Set(ControlMode::Position, 1250);
-			Wait(1);
-			printf("\nPost Run Encoder value: %i", left1.GetSensorCollection().GetQuadraturePosition());
-			Wait(1);
+	void Autonomous()
+	{
+		//http://wpilib.screenstepslive.com/s/currentCS/m/getting_started/l/826278-2018-game-data-details
+		std::string gameData;
+		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
+
+		if(gameData[0] == 'L')  //if the switch we are trying to score in is on the left
+		{
+			//left auto
 		}
+		else
+		{
+			//right auto
+		}
+
+
 	}
 
 
