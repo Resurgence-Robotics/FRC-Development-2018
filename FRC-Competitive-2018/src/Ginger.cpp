@@ -73,8 +73,15 @@ public:
 
 		ahrs = new AHRS(SerialPort::kMXP);
 
-		left0.SetInverted(true);
+
+		left0.Set(ControlMode::Follower, 1);
 		left1.SetInverted(true);
+		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
+		left1.SetSensorPhase(false);
+
+		right0.Set(ControlMode::Follower, 2);
+		right1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
+		right1.SetSensorPhase(false);
 
 		clamp.Set(DoubleSolenoid::Value::kOff);
 		manipSecond.Set(DoubleSolenoid::Value::kOff);
@@ -150,10 +157,10 @@ public:
 		double kI;//Integral Component's Tunable Value
 		double kD;//Derivative Component's Tunable Value
 
-		double error;
+		double error = angle - ahrs->GetYaw();
 		double output;
 
-		while(true){//Need to find a stop condition
+		while(error > 5 || error < -5){//Need to find a stop condition
 			error = angle - ahrs->GetYaw();//Error = Final - Current
 
 			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
@@ -164,9 +171,17 @@ public:
 
 			errorPrior = error;//Set previous error to this iterations error for next time
 
+			drive(output, -output);
+
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
 			Wait(iterationTime);//Wait the iteration time
 		}
 	}
+
 	double SonarSensor()
 	{
 		double supplied_voltage =5;
@@ -182,9 +197,7 @@ public:
 
 		Wait(3);
 
-		left0.SetNeutralMode(NeutralMode::Brake);
 		left1.SetNeutralMode(NeutralMode::Brake);
-		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
 		basicTurn(90, 0);
@@ -193,9 +206,7 @@ public:
 
 
 	void OperatorControl() override {
-		left0.SetNeutralMode(NeutralMode::Coast);
 		left1.SetNeutralMode(NeutralMode::Coast);
-		right0.SetNeutralMode(NeutralMode::Coast);
 		right1.SetNeutralMode(NeutralMode::Coast);
 
 		double left;
@@ -204,8 +215,6 @@ public:
 		while(IsEnabled() && IsOperatorControl()){
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
-
-
 
 			if(abs(left) >= THRESHOLD){
 				left0.Set(ControlMode::PercentOutput, left);
@@ -260,6 +269,11 @@ public:
 
 			float Sonar1 =SonarSensor();
 			printf("s: %f \n",Sonar1);
+
+			SmartDashboard::PutNumber("Left Encoder", left1.GetSelectedSensorPosition(0));
+			SmartDashboard::PutNumber("Left Velocity", left1.GetSelectedSensorVelocity(0));
+			SmartDashboard::PutNumber("Right Encoder", right1.GetSelectedSensorPosition(0));
+			SmartDashboard::PutNumber("Right Velocity", right1.GetSelectedSensorVelocity(0));
 
 			//Rotation
 			SmartDashboard::PutNumber("NavX Pitch", ahrs->GetPitch());
