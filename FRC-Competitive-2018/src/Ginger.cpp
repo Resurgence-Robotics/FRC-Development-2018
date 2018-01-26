@@ -17,7 +17,7 @@
 
 class Ginger : public frc::SampleRobot {
 	//System Constants
-	const int THRESHOLD = 0.1;
+	const int THRESHOLD = 0.05;
 
 	//Control System
 	AHRS *ahrs;
@@ -73,7 +73,7 @@ public:
 
 		ahrs = new AHRS(SerialPort::kMXP);
 
-
+//https://github.com/CrossTheRoadElec/Phoenix-Examples-Languages/blob/master/C%2B%2B/SetSensorPosition/src/Robot.cpp
 		left0.Set(ControlMode::Follower, 1);
 		left1.SetInverted(true);
 		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
@@ -190,6 +190,16 @@ public:
 
 		//printf("\n Distance:%f", distance);
 		return distance;
+	}
+
+	void EncoderDrive(float distance)
+	{
+		float wheelRadius= 2.2;
+		float wheelCircumpfrence = 2* 3.14159265 * wheelRadius;
+		float PPR = 0; //need to find this out
+		float encIn= PPR/wheelCircumpfrence;
+
+
 	}
 
 	void Autonomous() {
