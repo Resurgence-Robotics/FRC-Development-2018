@@ -74,12 +74,13 @@ public:
 		ahrs = new AHRS(SerialPort::kMXP);
 
 //https://github.com/CrossTheRoadElec/Phoenix-Examples-Languages/blob/master/C%2B%2B/SetSensorPosition/src/Robot.cpp
+	//first # is pidIdx(0 for primary closed loop and 1 for cascaded closed loop), second # is timeout in ms
 		left0.SetInverted(true);
 		left1.SetInverted(true);
-		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
+		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 10);
 		left1.SetSensorPhase(false);
 
-		right1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
+		right1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 10);
 		right1.SetSensorPhase(false);
 
 		clamp.Set(DoubleSolenoid::Value::kOff);
@@ -194,12 +195,38 @@ public:
 		return distance;
 	}
 
-	void EncoderDrive(float distance)
+	void DriveWithEnc(float target, float speed)//not tested
+	{
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);//reset encoders
+
+		float enc=0;
+		if(target>0)//positive/forward
+		{
+			while((target>enc)&&(IsAutonomous())&&(IsEnabled()))
+			{
+				enc= left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+				printf("enc:%f \n",enc);
+				drive(0.5, 0.5);
+				Wait(0.001);
+			}
+		}
+		if (target<0)//negative/backwards
+		{
+
+		}
+		drive(0.0,0.0);
+	}
+	void EncoderDrive(float distance)//not tested
 	{
 		float wheelRadius= 2.2;
 		float wheelCircumpfrence = 2* 3.14159265 * wheelRadius;
-		float PPR = 0; //need to find this out
+		float PPR = 360; //need to find this out
 		float encIn= PPR/wheelCircumpfrence;
+		float Target= distance*encIn;
+		DriveWithEnc(Target, 0.5);
+
+
 
 
 	}
@@ -277,6 +304,8 @@ public:
 			manipFirst.Set(DoubleSolenoid::Value::kForward);
 			manipSecond.Set(DoubleSolenoid::Value::kForward);
 
+
+
 			/*
 			if(stick0->GetRawButton(2)){
 				manipFirst.Set(DoubleSolenoid::Value::kReverse);
@@ -307,6 +336,7 @@ public:
 
 			float Sonar1 =SonarSensor();
 			printf("s: %f \n",Sonar1);
+
 
 			SmartDashboard::PutNumber("Left Encoder", left1.GetSelectedSensorPosition(0));
 			SmartDashboard::PutNumber("Left Velocity", left1.GetSelectedSensorVelocity(0));
