@@ -74,12 +74,11 @@ public:
 		ahrs = new AHRS(SerialPort::kMXP);
 
 //https://github.com/CrossTheRoadElec/Phoenix-Examples-Languages/blob/master/C%2B%2B/SetSensorPosition/src/Robot.cpp
-		left0.Set(ControlMode::Follower, 1);
+		left0.SetInverted(true);
 		left1.SetInverted(true);
 		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
 		left1.SetSensorPhase(false);
 
-		right0.Set(ControlMode::Follower, 2);
 		right1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 0);
 		right1.SetSensorPhase(false);
 
@@ -144,8 +143,6 @@ public:
 		}
 	}
 
-
-
 	//The reference I used: http://robotsforroboticists.com/pid-control/
 	void PIDTurn(int angle){
 		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
@@ -153,9 +150,9 @@ public:
 		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
 		double iterationTime = 0.5;//Time in seconds each iteration of the loop should take
 
-		double kP;//Proportional Component's Tunable Value
-		double kI;//Integral Component's Tunable Value
-		double kD;//Derivative Component's Tunable Value
+		double kP = 0.5;//Proportional Component's Tunable Value
+		double kI = 0;//Integral Component's Tunable Value
+		double kD = 0;//Derivative Component's Tunable Value
 
 		double error = angle - ahrs->GetYaw();
 		double output;
@@ -169,10 +166,15 @@ public:
 
 			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
 
-			errorPrior = error;//Set previous error to this iterations error for next time
+			output = Map(output, -100.0, 100.0, -1.0, 1.0);
 
 			drive(output, -output);
 
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
 			SmartDashboard::PutNumber("Output", output);
 			SmartDashboard::PutNumber("Error", error);
 			SmartDashboard::PutNumber("Setpoint", angle);
@@ -202,21 +204,35 @@ public:
 
 	}
 
+	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
+		return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+	}
+
 	void Autonomous() {
 		ahrs->Reset();
 
 		Wait(3);
 
+
+		left0.SetNeutralMode(NeutralMode::Brake);
 		left1.SetNeutralMode(NeutralMode::Brake);
+		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		basicTurn(90, 0);
+		//basicTurn(90, 0);
+		PIDTurn(90);
 
 	}
 
 
 	void OperatorControl() override {
+		ahrs->Reset();
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);
+
+		left0.SetNeutralMode(NeutralMode::Coast);
 		left1.SetNeutralMode(NeutralMode::Coast);
+		right0.SetNeutralMode(NeutralMode::Coast);
 		right1.SetNeutralMode(NeutralMode::Coast);
 
 		double left;
@@ -226,7 +242,13 @@ public:
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
 
-			if(abs(left) >= THRESHOLD){
+			SmartDashboard::PutNumber("Left Output", left);
+			SmartDashboard::PutNumber("Right Output", right);
+
+			SmartDashboard::PutNumber("Stick 0 Y", stick0->GetY());
+			SmartDashboard::PutNumber("Stick 0 X", stick0->GetX());
+
+			if(left >= THRESHOLD || left <= -THRESHOLD){
 				left0.Set(ControlMode::PercentOutput, left);
 				left1.Set(ControlMode::PercentOutput, left);
 			}
@@ -235,7 +257,7 @@ public:
 				left1.Set(ControlMode::PercentOutput, 0);
 			}
 
-			if(abs(right) >= THRESHOLD){
+			if(right >= THRESHOLD || right <= -THRESHOLD){
 				right0.Set(ControlMode::PercentOutput, right);
 				right1.Set(ControlMode::PercentOutput, right);
 			}
@@ -244,6 +266,7 @@ public:
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
 
+
 			if(stick0->GetTrigger()){
 				clamp.Set(DoubleSolenoid::Value::kForward);
 			}
@@ -251,6 +274,10 @@ public:
 				clamp.Set(DoubleSolenoid::Value::kReverse);
 			}
 
+			manipFirst.Set(DoubleSolenoid::Value::kForward);
+			manipSecond.Set(DoubleSolenoid::Value::kForward);
+
+			/*
 			if(stick0->GetRawButton(2)){
 				manipFirst.Set(DoubleSolenoid::Value::kReverse);
 				manipSecond.Set(DoubleSolenoid::Value::kReverse);
@@ -260,6 +287,7 @@ public:
 				manipFirst.Set(DoubleSolenoid::Value::kForward);
 				manipSecond.Set(DoubleSolenoid::Value::kForward);
 			}
+			*/
 
 			if(stick0->GetRawButton(3)){
 				chute.Set(DoubleSolenoid::Value::kForward);
@@ -284,6 +312,7 @@ public:
 			SmartDashboard::PutNumber("Left Velocity", left1.GetSelectedSensorVelocity(0));
 			SmartDashboard::PutNumber("Right Encoder", right1.GetSelectedSensorPosition(0));
 			SmartDashboard::PutNumber("Right Velocity", right1.GetSelectedSensorVelocity(0));
+
 
 			//Rotation
 			SmartDashboard::PutNumber("NavX Pitch", ahrs->GetPitch());
