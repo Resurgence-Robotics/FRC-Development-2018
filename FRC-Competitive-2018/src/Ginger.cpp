@@ -145,21 +145,30 @@ public:
 	}
 
 	//The reference I used: http://robotsforroboticists.com/pid-control/
-	void PIDTurn(int angle){
+	void PIDTurn45(int angle){
+		ahrs->Reset();
+		Wait(3);
+
+		angle = (angle > 0) ? -45 : 45;
+
 		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
 		double integral = 0;//Integral starts at 0 since that's how integral work
 		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
-		double iterationTime = 0.5;//Time in seconds each iteration of the loop should take
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
 
-		double kP = 0.5;//Proportional Component's Tunable Value
-		double kI = 0;//Integral Component's Tunable Value
-		double kD = 0;//Derivative Component's Tunable Value
+		double kP = 0.5;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.5;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
 
 		double error = angle - ahrs->GetYaw();
 		double output;
 
-		while(error > 5 || error < -5){//Need to find a stop condition
+		//printf("Pre Loop\n");
+
+		while((error > 1 || error < -1) && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
 			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			//printf("Pre Calculations\n");
 
 			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
 
@@ -167,11 +176,21 @@ public:
 
 			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
 
-			output = Map(output, -100.0, 100.0, -1.0, 1.0);
+			output = Map(output, -angle, angle, -0.7, 0.7);
 
-			drive(output, -output);
+			if(angle < 0){
+				drive(output, -output);
+			}
+			else if(angle > 0){
+				drive(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
 
 			errorPrior = error;//Set previous error to this iterations error for next time
+
+			//printf("Pre Print\n");
 
 			SmartDashboard::PutNumber("Proportional", kP * error);
 			SmartDashboard::PutNumber("Integral", integral);
@@ -183,6 +202,73 @@ public:
 
 			Wait(iterationTime);//Wait the iteration time
 		}
+
+		drive(0.0, 0.0);
+
+		printf("PID Complete\n");
+	}
+
+	void PIDTurn90(int angle){
+		ahrs->Reset();
+		Wait(3);
+
+		angle = (angle > 0) ? -90 : 90;
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+
+		double kP = 0.5;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 1.0;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.3;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+
+		double error = angle - ahrs->GetYaw();
+		double output;
+
+		//printf("Pre Loop\n");
+
+		while((error > 1 || error < -1) && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			//printf("Pre Calculations\n");
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				drive(output, -output);
+			}
+			else if(angle > 0){
+				drive(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			//printf("Pre Print\n");
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+	drive(0.0, 0.0);
+
+	printf("PID Complete\n");
 	}
 
 	double SonarSensor()
@@ -211,11 +297,16 @@ public:
 				Wait(0.001);
 			}
 		}
-		if (target<0)//negative/backwards
+		else if (target<0)//negative/backwards
 		{
 
 		}
+		else{
+			printf("Target = 0");
+		}
 		drive(0.0,0.0);
+
+
 	}
 	void EncoderDrive(float distance)//not tested
 	{
@@ -236,19 +327,16 @@ public:
 	}
 
 	void Autonomous() {
-		ahrs->Reset();
-
-		Wait(3);
-
-
 		left0.SetNeutralMode(NeutralMode::Brake);
 		left1.SetNeutralMode(NeutralMode::Brake);
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		//basicTurn(90, 0);
-		PIDTurn(90);
-
+		PIDTurn45(1);
+		Wait(3);
+		//PIDTurn(90);
+		Wait(3);
+		//PIDTurn(45);
 	}
 
 
