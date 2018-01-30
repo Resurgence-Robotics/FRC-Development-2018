@@ -73,8 +73,8 @@ public:
 
 		ahrs = new AHRS(SerialPort::kMXP);
 
-//https://github.com/CrossTheRoadElec/Phoenix-Examples-Languages/blob/master/C%2B%2B/SetSensorPosition/src/Robot.cpp
-	//first # is pidIdx(0 for primary closed loop and 1 for cascaded closed loop), second # is timeout in ms
+		//https://github.com/CrossTheRoadElec/Phoenix-Examples-Languages/blob/master/C%2B%2B/SetSensorPosition/src/Robot.cpp
+		//first # is pidIdx(0 for primary closed loop and 1 for cascaded closed loop), second # is timeout in ms
 		left0.SetInverted(true);
 		left1.SetInverted(true);
 		left1.ConfigSelectedFeedbackSensor(phoenix::motorcontrol::FeedbackDevice::QuadEncoder, 0, 10);
@@ -89,63 +89,15 @@ public:
 		manipFirst.Set(DoubleSolenoid::Value::kOff);
 	}
 
-	void drive(double left, double right){
+	void Drive(double left, double right){
 		left0.Set(ControlMode::PercentOutput, left);
 		left1.Set(ControlMode::PercentOutput, left);
 		right0.Set(ControlMode::PercentOutput, right);
 		right1.Set(ControlMode::PercentOutput, right);
 	}
 
-	void basicTurn(int angle, int timeOut){//Clockwise is positive, AntiClockwise is negative. Probably pretty crap
-		double startPoint = ahrs->GetYaw();
-		double setPoint = startPoint + angle;
-		double acceptableError = 5;
-		double initialDiff = setPoint - startPoint;//Final - initial
-
-		double currentDiff;
-		double speed;
-		//double leftOut;
-		//double rightOut;
-
-		if(angle > 0){
-			while(!(ahrs->GetYaw() > setPoint - acceptableError && ahrs->GetYaw() < setPoint + acceptableError) && IsEnabled() && IsAutonomous()){//If the gyro is within acceptable error
-				currentDiff = setPoint - ahrs->GetYaw();//Final - Current
-
-				speed = (currentDiff / initialDiff) / 2;
-
-				drive(-speed, speed);
-
-				SmartDashboard::PutNumber("Start point", startPoint);
-				SmartDashboard::PutNumber("Set point", setPoint);
-				SmartDashboard::PutNumber("Initial Difference", initialDiff);
-				SmartDashboard::PutNumber("Current Difference", currentDiff);
-				SmartDashboard::PutNumber("Speed", speed);
-				SmartDashboard::PutNumber("NavX Yaw", ahrs->GetYaw());
-			}
-		}
-		else if(angle < 0){
-			while(!(ahrs->GetYaw() > setPoint - acceptableError && ahrs->GetYaw() < setPoint + acceptableError) && IsEnabled() && IsAutonomous()){//If the gyro is within acceptable error
-				currentDiff = setPoint - ahrs->GetYaw();//Final - Current
-
-				speed = (currentDiff / initialDiff) / 2;
-
-				drive(speed, -speed);
-
-				SmartDashboard::PutNumber("Start point", startPoint);
-				SmartDashboard::PutNumber("Set point", setPoint);
-				SmartDashboard::PutNumber("Initial Difference", initialDiff);
-				SmartDashboard::PutNumber("Current Difference", currentDiff);
-				SmartDashboard::PutNumber("Speed", speed);
-				SmartDashboard::PutNumber("NavX Yaw", ahrs->GetYaw());
-			}
-		}
-		else{
-			printf("You broke the turn function somehow");
-		}
-	}
-
 	//The reference I used: http://robotsforroboticists.com/pid-control/
-	void PIDTurn45(int angle){ //plug in 1
+	void PIDTurn45(int angle){ //Positive number for clockwise, Negative for anti-clockwise
 		ahrs->Reset();
 		Wait(3);
 
@@ -179,10 +131,10 @@ public:
 			output = Map(output, -angle, angle, -0.7, 0.7);
 
 			if(angle < 0){
-				drive(output, -output);
+				Drive(output, -output);
 			}
 			else if(angle > 0){
-				drive(-output, output);
+				Drive(-output, output);
 			}
 			else{
 				printf("Angle = 0");
@@ -203,12 +155,12 @@ public:
 			Wait(iterationTime);//Wait the iteration time
 		}
 
-		drive(0.0, 0.0);
+		Drive(0.0, 0.0);
 
 		printf("PID Complete\n");
 	}
 
-	void PIDTurn90(int angle){ //plug in 1
+	void PIDTurn90(int angle){ //Positive number for clockwise, Negative for anti-clockwise
 		ahrs->Reset();
 		Wait(3);
 
@@ -226,13 +178,10 @@ public:
 		double error = angle - ahrs->GetYaw();
 		double output;
 
-		//printf("Pre Loop\n");
-
 		while((error > 1 || error < -1) && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
 			error = angle - ahrs->GetYaw();//Error = Final - Current
 
 			//printf("Pre Calculations\n");
-
 			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
 
 			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
@@ -242,10 +191,10 @@ public:
 			output = Map(output, -angle, angle, -0.7, 0.7);
 
 			if(angle < 0){
-				drive(output, -output);
+				Drive(output, -output);
 			}
 			else if(angle > 0){
-				drive(-output, output);
+				Drive(-output, output);
 			}
 			else{
 				printf("Angle = 0");
@@ -266,13 +215,12 @@ public:
 			Wait(iterationTime);//Wait the iteration time
 		}
 
-	drive(0.0, 0.0);
+	Drive(0.0, 0.0);
 
 	printf("PID Complete\n");
 	}
 
-	double SonarSensor()
-	{
+	double SonarSensor(){
 		double supplied_voltage =5;
 		double vi= 270/supplied_voltage;
 		double distance = LV_MAX_Sonar.GetAverageVoltage() * vi;
@@ -281,51 +229,73 @@ public:
 		return distance;
 	}
 
-	void DriveWithEnc(float target, float speed)
-	{
+
+	void DriveFRC(float outputMagnitude, float curve){
+		float leftOutput, rightOutput;
+		float m_sensitivity = 0.5;
+		if (curve < 0){
+			float value = log(-curve);
+			float ratio = (value - m_sensitivity)/(value + m_sensitivity);
+
+			if (ratio == 0){ ratio =.0000000001;}
+
+			leftOutput = outputMagnitude / ratio;
+			rightOutput = outputMagnitude;
+		}
+		else if (curve > 0){
+			float value = log(curve);
+			float ratio = (value - m_sensitivity)/(value + m_sensitivity);
+
+			if (ratio == 0){ ratio =.0000000001;}
+
+			leftOutput = outputMagnitude;
+			rightOutput = outputMagnitude / ratio;
+		}
+		else{
+			leftOutput = outputMagnitude;
+			rightOutput = outputMagnitude;
+		}
+		Drive(rightOutput, leftOutput);
+	}
+
+	void DriveWithEnc(float target, float speed){
 		left1.SetSelectedSensorPosition(0, 0, 0);
 		right1.SetSelectedSensorPosition(0, 0, 0);//reset encoders
-		//ahrs->Reset();
+		ahrs->Reset();
+		Wait(0.25);
 
-		float enc=0;
-		//float kp= 0.125;
-		if(target>0)//positive/forward
-		{
-			while((target>enc)&&(IsAutonomous())&&(IsEnabled()))
-			{
-				enc= left1.GetSelectedSensorPosition(0); //set enc to value of encoder
-				printf("enc:%f \n",enc);
-				//float correction= kp*ahrs->GetRawGyroX();
-				//printf("gyroAngle:%f \n", ahrs->GetRawGyroX());
-				drive(-0.5, -0.5); //negative is forwards
+		float enc = 0;
+		float kp = 0.125;
+		if(target > 0){//positive/forward
+			while((target > enc) && (IsAutonomous()) && (IsEnabled())){
+				enc = left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+				printf("enc:%f \n", enc);
+				float correction = kp * ahrs->GetYaw();
+				printf("gyroAngle:%f \n", ahrs->GetYaw());
+				DriveFRC(-speed, correction); //negative is forwards
 				Wait(0.01);
 				printf("going forward \n");
 			}
 		}
-		else if (target<0)//negative/backwards
-		{
-			while((target<enc)&&(IsAutonomous())&&(IsEnabled()))
-			{
-			enc= left1.GetSelectedSensorPosition(0); //set enc to value of encoder
-			printf("enc:%f \n",enc);
-			drive(0.5, 0.5); //negative is forwards
-			Wait(0.01);
-			printf("going backwards \n");
+		else if (target < 0){//negative/backwards
+			while((target < enc) && (IsAutonomous()) && (IsEnabled())){
+				enc = left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+				printf("enc:%f \n", enc);
+				float correction = kp * ahrs->GetYaw();
+				printf("gyroAngle:%f \n", ahrs->GetYaw());
+				DriveFRC(speed, correction); //negative is forwards
+				Wait(0.01);
+				printf("going backwards \n");
 			}
-
 		}
-		else
-		{
+		else{
 			printf("Target = 0");
 		}
-		drive(0.0,0.0);
+		Drive(0.0, 0.0);
 		printf("outside of if statements \n");
-
-
 	}
-	void EncoderDrive(float distance)//tested (about 1/2 inches short)
-	{
 
+	void EncoderDrive(float distance){//tested (about 1/2 inches short)
 		float wheelRadius= 2.2;
 		float wheelCircumpfrence = 2* 3.142 * wheelRadius; //13.8
 		float PPR = 831; //tried 831 @29.5  was 4096
@@ -335,7 +305,6 @@ public:
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
 		DriveWithEnc(EncTarget, 0.25);
 		//29.5/831=30/x
-
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
