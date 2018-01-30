@@ -145,7 +145,7 @@ public:
 	}
 
 	//The reference I used: http://robotsforroboticists.com/pid-control/
-	void PIDTurn45(int angle){
+	void PIDTurn45(int angle){ //plug in 1
 		ahrs->Reset();
 		Wait(3);
 
@@ -208,7 +208,7 @@ public:
 		printf("PID Complete\n");
 	}
 
-	void PIDTurn90(int angle){
+	void PIDTurn90(int angle){ //plug in 1
 		ahrs->Reset();
 		Wait(3);
 
@@ -281,44 +281,60 @@ public:
 		return distance;
 	}
 
-	void DriveWithEnc(float target, float speed)//not tested
+	void DriveWithEnc(float target, float speed)
 	{
 		left1.SetSelectedSensorPosition(0, 0, 0);
 		right1.SetSelectedSensorPosition(0, 0, 0);//reset encoders
+		//ahrs->Reset();
 
 		float enc=0;
+		//float kp= 0.125;
 		if(target>0)//positive/forward
 		{
 			while((target>enc)&&(IsAutonomous())&&(IsEnabled()))
 			{
 				enc= left1.GetSelectedSensorPosition(0); //set enc to value of encoder
 				printf("enc:%f \n",enc);
-				drive(0.5, 0.5);
-				Wait(0.001);
+				//float correction= kp*ahrs->GetRawGyroX();
+				//printf("gyroAngle:%f \n", ahrs->GetRawGyroX());
+				drive(-0.5, -0.5); //negative is forwards
+				Wait(0.01);
+				printf("going forward \n");
 			}
 		}
 		else if (target<0)//negative/backwards
 		{
+			while((target<enc)&&(IsAutonomous())&&(IsEnabled()))
+			{
+			enc= left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+			printf("enc:%f \n",enc);
+			drive(0.5, 0.5); //negative is forwards
+			Wait(0.01);
+			printf("going backwards \n");
+			}
 
 		}
-		else{
+		else
+		{
 			printf("Target = 0");
 		}
 		drive(0.0,0.0);
+		printf("outside of if statements \n");
 
 
 	}
-	void EncoderDrive(float distance)//not tested
+	void EncoderDrive(float distance)//tested (about 1/2 inches short)
 	{
+
 		float wheelRadius= 2.2;
-		float wheelCircumpfrence = 2* 3.14159265 * wheelRadius;
-		float PPR = 360; //need to find this out
-		float encIn= PPR/wheelCircumpfrence;
-		float Target= distance*encIn;
-		DriveWithEnc(Target, 0.5);
-
-
-
+		float wheelCircumpfrence = 2* 3.142 * wheelRadius; //13.8
+		float PPR = 831; //tried 831 @29.5  was 4096
+		float encIn= PPR/wheelCircumpfrence; //296.8
+		printf("encIn:%f \n", encIn);
+		float EncTarget= distance*encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		DriveWithEnc(EncTarget, 0.25);
+		//29.5/831=30/x
 
 	}
 
@@ -332,11 +348,17 @@ public:
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		PIDTurn45(1);
+		EncoderDrive(30);
+
+
+
+
+	/*	PIDTurn45(1);
 		Wait(3);
 		//PIDTurn(90);
 		Wait(3);
 		//PIDTurn(45);
+	*/
 	}
 
 
