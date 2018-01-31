@@ -296,15 +296,15 @@ public:
 	}
 
 	void EncoderDrive(float distance){//tested (about 1/2 inches short)
-		float wheelRadius= 2.2;
+		float wheelRadius= 2.535;
 		float wheelCircumpfrence = 2* 3.142 * wheelRadius; //13.8
-		float PPR = 831; //tried 831 @29.5  was 4096
+		float PPR = 1440; //tried 831
 		float encIn= PPR/wheelCircumpfrence; //296.8
 		printf("encIn:%f \n", encIn);
 		float EncTarget= distance*encIn; //(60*296.8)=17,808
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
 		DriveWithEnc(EncTarget, 0.25);
-		//29.5/831=30/x
+		//41/30=1.7/x
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
@@ -332,6 +332,10 @@ public:
 
 
 	void OperatorControl() override {
+
+
+
+
 		ahrs->Reset();
 		left1.SetSelectedSensorPosition(0, 0, 0);
 		right1.SetSelectedSensorPosition(0, 0, 0);
