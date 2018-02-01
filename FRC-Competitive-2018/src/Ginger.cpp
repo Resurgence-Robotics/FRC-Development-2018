@@ -17,7 +17,9 @@
 
 class Ginger : public frc::SampleRobot {
 	//System Constants
-	const int THRESHOLD = 0.05;
+	const double THRESHOLD = 0.05;
+	const int LEFT = 1;
+	const int RIGHT = -1;
 
 	//Control System
 	AHRS *ahrs;
@@ -108,8 +110,8 @@ public:
 		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
 		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
 
-		double kP = 0.5;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
-		double kI = 0.5;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
 		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
 
 		double error = angle - ahrs->GetYaw();
@@ -162,7 +164,7 @@ public:
 
 	void PIDTurn90(int angle){ //Positive number for clockwise, Negative for anti-clockwise
 		ahrs->Reset();
-		Wait(3);
+		Wait(0.5);
 
 		angle = (angle > 0) ? -90 : 90;
 
@@ -171,9 +173,9 @@ public:
 		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
 		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
 
-		double kP = 0.5;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
-		double kI = 1.0;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
-		double kD = 0.3;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
 
 		double error = angle - ahrs->GetYaw();
 		double output;
@@ -220,6 +222,83 @@ public:
 	printf("PID Complete\n");
 	}
 
+	void PIDTuner(){
+		ahrs->Reset();
+		Wait(3);
+
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+
+		double kP = 0;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+		double angle = 0;
+		bool hold = true;
+
+		SmartDashboard::PutNumber("kP", kP);
+		SmartDashboard::PutNumber("kI", kI);
+		SmartDashboard::PutNumber("kD", kD);
+		SmartDashboard::PutNumber("Angle", angle);
+		SmartDashboard::PutBoolean("Hold", hold);
+
+		double output;
+		double error;
+
+		while((IsEnabled() && IsAutonomous())){
+
+			kP = SmartDashboard::GetNumber("kP", 0);
+			kI = SmartDashboard::GetNumber("kI", 0);
+			kD = SmartDashboard::GetNumber("kD", 0);
+			angle = SmartDashboard::GetNumber("Angle", 0);
+			hold = SmartDashboard::GetBoolean("Hold", true);
+
+			while(hold){
+				kP = SmartDashboard::GetNumber("kP", 0);
+				kI = SmartDashboard::GetNumber("kI", 0);
+				kD = SmartDashboard::GetNumber("kD", 0);
+				angle = SmartDashboard::GetNumber("Angle", 0);
+				hold = SmartDashboard::GetBoolean("Hold", true);
+			}
+
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			//printf("Pre Calculations\n");
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				Drive(output, -output);
+			}
+			else if(angle > 0){
+				Drive(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			//printf("Pre Print\n");
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+	}
+
 	double SonarSensor(){
 		double supplied_voltage =5;
 		double vi= 270/supplied_voltage;
@@ -228,7 +307,6 @@ public:
 		//printf("\n Distance:%f", distance);
 		return distance;
 	}
-
 
 	void DriveFRC(float outputMagnitude, float curve){
 		float leftOutput, rightOutput;
@@ -296,12 +374,12 @@ public:
 	}
 
 	void EncoderDrive(float distance){//tested (about 1/2 inches short)
-		float wheelRadius= 2.535;
-		float wheelCircumpfrence = 2* 3.142 * wheelRadius; //13.8
+		float wheelRadius = 2.535;
+		float wheelCircumpfrence = 2 * 3.142 * wheelRadius; //13.8
 		float PPR = 1440; //tried 831
-		float encIn= PPR/wheelCircumpfrence; //296.8
+		float encIn = PPR / wheelCircumpfrence; //296.8
 		printf("encIn:%f \n", encIn);
-		float EncTarget= distance*encIn; //(60*296.8)=17,808
+		float EncTarget = distance * encIn; //(60*296.8)=17,808
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
 		DriveWithEnc(EncTarget, 0.25);
 		//41/30=1.7/x
@@ -317,24 +395,22 @@ public:
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		EncoderDrive(30);
+		EncoderDrive(50);
 
-
-
-
-	/*	PIDTurn45(1);
-		Wait(3);
-		//PIDTurn(90);
-		Wait(3);
-		//PIDTurn(45);
-	*/
+		/*
+		for(int i = 0; i < 4; i++){
+			EncoderDrive(60);
+			printf("Straight #%d\n", i);
+			Wait(1);
+			PIDTurn90(RIGHT);
+			printf("Turn #%d\n", i);
+			Wait(1);
+		}
+		*/
 	}
 
 
 	void OperatorControl() override {
-
-
-
 
 		ahrs->Reset();
 		left1.SetSelectedSensorPosition(0, 0, 0);
