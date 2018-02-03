@@ -96,6 +96,7 @@ public:
 		left1.Set(ControlMode::PercentOutput, left);
 		right0.Set(ControlMode::PercentOutput, right);
 		right1.Set(ControlMode::PercentOutput, right);
+		printf("Drive: %f, %f\n", left, right);
 	}
 
 	//The reference I used: http://robotsforroboticists.com/pid-control/
@@ -308,12 +309,12 @@ public:
 		return distance;
 	}
 
-	void DriveFRC(float outputMagnitude, float curve){
-		float leftOutput, rightOutput;
-		float m_sensitivity = 0.5;
+	void DriveFRC(double outputMagnitude, double curve){
+		double leftOutput, rightOutput;
+		double m_sensitivity = 0.05;
 		if (curve < 0){
-			float value = log(-curve);
-			float ratio = (value - m_sensitivity)/(value + m_sensitivity);
+			double value = log(-curve);
+			double ratio = (value - m_sensitivity)/(value + m_sensitivity);
 
 			if (ratio == 0){ ratio =.0000000001;}
 
@@ -321,8 +322,8 @@ public:
 			rightOutput = outputMagnitude;
 		}
 		else if (curve > 0){
-			float value = log(curve);
-			float ratio = (value - m_sensitivity)/(value + m_sensitivity);
+			double value = log(curve);
+			double ratio = (value - m_sensitivity)/(value + m_sensitivity);
 
 			if (ratio == 0){ ratio =.0000000001;}
 
@@ -346,7 +347,7 @@ public:
 		float kp = 0.125;
 		if(target > 0){//positive/forward
 			while((target > enc) && (IsAutonomous()) && (IsEnabled())){
-				enc = left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+				enc = right1.GetSelectedSensorPosition(0); //set enc to value of encoder
 				printf("enc:%f \n", enc);
 				float correction = kp * ahrs->GetYaw();
 				printf("gyroAngle:%f \n", ahrs->GetYaw());
@@ -357,7 +358,7 @@ public:
 		}
 		else if (target < 0){//negative/backwards
 			while((target < enc) && (IsAutonomous()) && (IsEnabled())){
-				enc = left1.GetSelectedSensorPosition(0); //set enc to value of encoder
+				enc = right1.GetSelectedSensorPosition(0); //set enc to value of encoder
 				printf("enc:%f \n", enc);
 				float correction = kp * ahrs->GetYaw();
 				printf("gyroAngle:%f \n", ahrs->GetYaw());
@@ -385,6 +386,68 @@ public:
 		//41/30=1.7/x
 	}
 
+	void DriveStraight(double distance, double speed){//Runs 10 inches to far for values 20-60, 100 is approx accurate
+
+		//Calculation block: convert inches to encoder counts
+		double wheelRadius = 2.535;
+		double wheelCircumpfrence = 2 * 3.14159 * wheelRadius;//15.9
+		double PPR = 1440;//tried 831
+		double encIn = PPR / wheelCircumpfrence;//90.56
+		double EncTarget = distance * encIn;//(10*90.56)=905.6
+		printf("encIn: %f\n", encIn);
+		printf("EncTarget: %f\n", EncTarget);//printing out 17776 :)
+
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);//reset encoders
+		ahrs->Reset();
+		Wait(0.25);
+
+		double enc = 0;
+		double kp = 0.125;
+		double correction = 0;
+
+		if(EncTarget > 0){//positive/forward
+			while((EncTarget > enc) && (IsAutonomous()) && (IsEnabled())){
+				enc = right1.GetSelectedSensorPosition(0);//set enc to value of encoder
+				correction = kp * ahrs->GetYaw();//
+				printf("enc: %f\n", enc);
+				printf("gyroAngle: %f\n", ahrs->GetYaw());
+				//Drive(-speed, -speed);
+				DriveFRC(-speed, correction);//negative is forwards
+				Wait(0.01);
+				printf("Going forward\n");
+
+				SmartDashboard::PutNumber("Left Encoder", left1.GetSelectedSensorPosition(0));
+				SmartDashboard::PutNumber("Right Encoder", right1.GetSelectedSensorPosition(0));
+				SmartDashboard::PutNumber("Gyro", ahrs->GetYaw());
+				SmartDashboard::PutNumber("Correction", correction);
+			}
+		}
+		else if (EncTarget < 0){//negative/backwards
+			while((EncTarget < enc) && (IsAutonomous()) && (IsEnabled())){
+				enc = right1.GetSelectedSensorPosition(0);//set enc to value of encoder
+				correction = kp * ahrs->GetYaw();
+				printf("enc: %f\n", enc);
+				printf("gyroAngle: %f\n", ahrs->GetYaw());
+				//Drive(speed, speed);
+				DriveFRC(speed, correction);//negative is forwards
+				Wait(0.01);
+				printf("Going backwards\n");
+
+				SmartDashboard::PutNumber("Left Encoder", left1.GetSelectedSensorPosition(0));
+				SmartDashboard::PutNumber("Right Encoder", right1.GetSelectedSensorPosition(0));
+				SmartDashboard::PutNumber("Gyro", ahrs->GetYaw());
+				SmartDashboard::PutNumber("Correction", correction);
+			}
+		}
+		else{
+			printf("Target = 0");
+		}
+		printf("Drive Complete\n");
+		Drive(0.0, 0.0);
+		printf("Post Drive\n");
+	}
+
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
 		return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
 	}
@@ -395,11 +458,16 @@ public:
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		EncoderDrive(50);
+
+		DriveStraight(-50, 0.5);
+		//101.5
+		//102
+		//101
+		//EncoderDrive(10);
 
 		/*
 		for(int i = 0; i < 4; i++){
-			EncoderDrive(60);
+			DriveStraight(60, 0.7);
 			printf("Straight #%d\n", i);
 			Wait(1);
 			PIDTurn90(RIGHT);
@@ -416,10 +484,10 @@ public:
 		left1.SetSelectedSensorPosition(0, 0, 0);
 		right1.SetSelectedSensorPosition(0, 0, 0);
 
-		left0.SetNeutralMode(NeutralMode::Coast);
-		left1.SetNeutralMode(NeutralMode::Coast);
-		right0.SetNeutralMode(NeutralMode::Coast);
-		right1.SetNeutralMode(NeutralMode::Coast);
+		left0.SetNeutralMode(NeutralMode::Brake);
+		left1.SetNeutralMode(NeutralMode::Brake);
+		right0.SetNeutralMode(NeutralMode::Brake);
+		right1.SetNeutralMode(NeutralMode::Brake);
 
 		double left;
 		double right;
@@ -523,8 +591,12 @@ public:
 
 	void Test() override {}
 
+	void Disabled() override{
+		printf("I r havs been disabel");
+	}
+
 private:
 
 };
 
-START_ROBOT_CLASS(Ginger)
+START_ROBOT_CLASS(Ginger);
