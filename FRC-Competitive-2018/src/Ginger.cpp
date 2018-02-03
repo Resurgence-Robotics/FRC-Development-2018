@@ -91,6 +91,10 @@ public:
 		manipFirst.Set(DoubleSolenoid::Value::kOff);
 	}
 
+	double DoubleAbs(double in){
+		return (in < 0 ) ? -in: in;
+	}
+
 	void Drive(double left, double right){
 		left0.Set(ControlMode::PercentOutput, left);
 		left1.Set(ControlMode::PercentOutput, left);
@@ -386,7 +390,7 @@ public:
 		//41/30=1.7/x
 	}
 
-	void DriveStraight(double distance, double speed){//Runs 10 inches to far for values 20-60, 100 is approx accurate
+	void DriveStraight(double distance, double speed){//Drives with Encoder and Gyro
 
 		//Calculation block: convert inches to encoder counts
 		double wheelRadius = 2.535;
@@ -448,6 +452,122 @@ public:
 		printf("Post Drive\n");
 	}
 
+	void DrivePID(double distance, double speed){//Drives with Encoders in PID loop
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);
+		ahrs->GetYaw();
+
+		double wheelRadius = 2;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		double integral = 0;
+		double kP = 0.125;
+		double kI = 0.05;
+		double output = 0;
+		double iterationTime = 0.1;
+		int timeBuffer = 0;
+
+		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
+			error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+			integral = integral + (error*iterationTime);
+
+			output = (kP * error) + (kI * integral);
+
+			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
+
+			Drive(-output, -output);
+
+			if(error > 50 || error < -50){
+				timeBuffer = 0;
+			}
+			else{
+				timeBuffer++;
+			}
+
+
+			printf("Time Buffer: %i\n", timeBuffer);
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", EncTarget);
+			SmartDashboard::PutNumber("Current Encoder", right1.GetSelectedSensorPosition(0));
+
+			Wait(iterationTime);
+		}
+		printf("Finished PID\n");
+		Drive(0.0, 0.0);
+	}
+
+	void DriveStraightPID(double distance, double speed){//Drives with Encoders and Gyro in PID loop
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);
+		ahrs->GetYaw();
+
+		double wheelRadius = 2;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		double integral = 0;
+		double kP = 0.125;
+		double kI = 0.05;
+		double gP = 0.125;
+		double output = 0;
+		double iterationTime = 0.1;
+		double gyroCorrection = 0;
+		int timeBuffer = 0;
+
+		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
+			error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+			integral = integral + (error*iterationTime);
+
+			output = (kP * error) + (kI * integral);
+
+			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
+
+			gyroCorrection = gP * ahrs->GetYaw();
+
+			printf("Gyro Correction: %f\n", gyroCorrection);
+
+			DriveFRC(-output, gyroCorrection);
+
+			if(error > 50 || error < -50){
+				timeBuffer = 0;
+			}
+			else{
+				timeBuffer++;
+			}
+
+
+			printf("Time Buffer: %i\n", timeBuffer);
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", EncTarget);
+			SmartDashboard::PutNumber("Current Encoder", right1.GetSelectedSensorPosition(0));
+
+			Wait(iterationTime);
+		}
+		printf("Finished PID\n");
+		Drive(0.0, 0.0);
+	}
+
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
 		return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
 	}
@@ -458,8 +578,15 @@ public:
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
+		DriveStraightPID(50, 0.5);
 
-		DriveStraight(-50, 0.5);
+		/*
+		DrivePID(50, 1.0);
+		PIDTurn90(RIGHT);
+		DrivePID(20, 0.7);
+		*/
+
+		//DriveStraight(-50, 0.5);
 		//101.5
 		//102
 		//101
