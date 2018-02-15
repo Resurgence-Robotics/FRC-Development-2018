@@ -36,6 +36,7 @@ class Robot : public frc::SampleRobot {
 
 	//Lift
 	TalonSRX lift0;
+	TalonSRX lift1;
 	DigitalInput limTop;
 	DigitalInput limBottom;
 
@@ -45,6 +46,7 @@ class Robot : public frc::SampleRobot {
 
 	//Manipulator
 	DoubleSolenoid clamp;
+
 
 
 public:
@@ -61,6 +63,7 @@ public:
 
 		//Lift
 		lift0(12),
+		lift1(15),
 		limTop(6),
 		limBottom(7),
 
@@ -85,6 +88,8 @@ public:
 		lift0.SetNeutralMode(NeutralMode::Coast);
 		intake0.SetNeutralMode(NeutralMode::Coast);
 		intake1.SetNeutralMode(NeutralMode::Coast);
+
+		clamp.Set(DoubleSolenoid::Value::kOff);
 
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
@@ -555,7 +560,7 @@ public:
 			//left = stick0->GetY();
 			//right = stick1->GetY();
 
-
+//driveterrain (driver 1)
 			if(fabs(left) >= THRESHOLD){
 				left0.Set(ControlMode::PercentOutput, left);
 				left1.Set(ControlMode::PercentOutput, left);
@@ -573,6 +578,41 @@ public:
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
+//lift (driver 2)
+			//lift motors
+			if(fabs(stick1->GetY()) >= THRESHOLD){
+				lift0.Set(ControlMode::PercentOutput, stick1->GetY());
+				lift1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else if(fabs(stick1->GetY())<= THRESHOLD){
+				lift0.Set(ControlMode::PercentOutput, stick1->GetY());
+				lift1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else{
+				lift0.Set(ControlMode::PercentOutput, 0);
+				lift1.Set(ControlMode::PercentOutput, 0);
+			}
+//pneumatics
+			if(stick1->GetRawButton(3)){
+				clamp.Set(DoubleSolenoid::Value::kForward);
+			}
+			else
+				clamp.Set(DoubleSolenoid::Value::kReverse);
+
+//intake (driver 2)
+			if(stick1->GetRawButton(1)){ //trigger button
+				intake0.Set(ControlMode::PercentOutput, 100);
+				intake1.Set(ControlMode::PercentOutput, 100);
+			}
+			else if(stick1->GetRawButton(2)){ //button #2
+				intake0.Set(ControlMode::PercentOutput, -100);
+				intake1.Set(ControlMode::PercentOutput, -100);
+			}
+			else{
+				intake0.Set(ControlMode::PercentOutput, 0);
+				intake1.Set(ControlMode::PercentOutput, 0);
+			}
+
 			Wait(0.04);
 		}
 	}
