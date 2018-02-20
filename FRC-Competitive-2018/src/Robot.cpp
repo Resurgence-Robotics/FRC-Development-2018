@@ -43,10 +43,8 @@ class Robot : public frc::SampleRobot {
 	//Intake
 	TalonSRX intake0;
 	TalonSRX intake1;
-
-	//Manipulator
-	DoubleSolenoid clamp;
-
+	DoubleSolenoid clampLeft;
+	DoubleSolenoid clampRight;
 
 
 public:
@@ -70,9 +68,8 @@ public:
 		//Intake
 		intake0(13),
 		intake1(14),
-
-		//Manipulator
-		clamp(0, 1)
+		clampLeft(0, 1),
+		clampRight(2, 3)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
@@ -89,8 +86,8 @@ public:
 		intake0.SetNeutralMode(NeutralMode::Coast);
 		intake1.SetNeutralMode(NeutralMode::Coast);
 
-		clamp.Set(DoubleSolenoid::Value::kOff);
-
+		clampLeft.Set(DoubleSolenoid::Value::kOff);
+		clampRight.Set(DoubleSolenoid::Value::kOff);
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		left0.SetSensorPhase(false);
@@ -105,6 +102,20 @@ public:
 		right0.Set(ControlMode::PercentOutput, right);
 		right1.Set(ControlMode::PercentOutput, right);
 		printf("SetSpeed: %f, %f\n", left, right);
+	}
+
+	void RunIntake(double speed, double time){
+		intake0.Set(ControlMode::PercentOutput, speed);
+		intake1.Set(ControlMode::PercentOutput, speed);
+		Wait(time);
+		intake0.Set(ControlMode::PercentOutput, 0.0);
+		intake1.Set(ControlMode::PercentOutput, 0.0);
+	}
+
+	void RunLift(double speed, double time){
+		lift0.Set(ControlMode::PercentOutput, speed);
+		Wait(time);
+		lift0.Set(ControlMode::PercentOutput, 0.0);
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
@@ -385,6 +396,14 @@ public:
 		return distance;
 	}
 
+	void DriveSonar(double distance){
+		double sonar = SonarSensor();
+
+		while(sonar > distance){
+			SetSpeed(0.6, 0.6);
+		}
+	}
+
 	void DriveFRC(double outputMagnitude, double curve){
 		double leftOutput, rightOutput;
 		double m_sensitivity = 0.05;
@@ -534,18 +553,27 @@ public:
 		std::string gameData;
 		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
 
-		if(gameData[0] == 'L')  //if the switch we are trying to score in is on the left
-		{
-			//left auto
-		}
-		else
-		{
-			//right auto
-		}
 
-
+		//Prototype Middle Start Auto
+		if(gameData[0] == 'L'){  //if the switch we are trying to score in is on the left
+			DriveStraightPID(20, 0.7);
+			PIDTurn(-90);
+			DriveStraightPID(36, 0.7);
+			PIDTurn(90);
+			RunLift(1.0, 1);
+			DriveSonar(5);
+			RunIntake(1.0, 2);
+		}
+		else{
+			DriveStraightPID(20, 0.7);
+			PIDTurn(90);
+			DriveStraightPID(36, 0.7);
+			PIDTurn(-90);
+			RunLift(1.0, 1);
+			DriveSonar(5);
+			RunIntake(1.0, 2);
+		}
 	}
-
 
 	void OperatorControl() override{
 		double left;
@@ -560,7 +588,7 @@ public:
 			//left = stick0->GetY();
 			//right = stick1->GetY();
 
-//driveterrain (driver 1)
+			//Drive Train (driver 1)
 			if(fabs(left) >= THRESHOLD){
 				left0.Set(ControlMode::PercentOutput, left);
 				left1.Set(ControlMode::PercentOutput, left);
@@ -578,8 +606,8 @@ public:
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
-//lift (driver 2)
-			//lift motors
+
+			//Lift (driver 2)
 			if(fabs(stick1->GetY()) >= THRESHOLD){
 				lift0.Set(ControlMode::PercentOutput, stick1->GetY());
 				lift1.Set(ControlMode::PercentOutput, stick1->GetY());
@@ -592,25 +620,28 @@ public:
 				lift0.Set(ControlMode::PercentOutput, 0);
 				lift1.Set(ControlMode::PercentOutput, 0);
 			}
-//pneumatics
-			if(stick1->GetRawButton(3)){
-				clamp.Set(DoubleSolenoid::Value::kForward);
-			}
-			else
-				clamp.Set(DoubleSolenoid::Value::kReverse);
 
-//intake (driver 2)
-			if(stick1->GetRawButton(1)){ //trigger button
+			//Intake (driver 2)
+			if(stick1->GetRawButton(1)){//Trigger button
 				intake0.Set(ControlMode::PercentOutput, 100);
 				intake1.Set(ControlMode::PercentOutput, 100);
 			}
-			else if(stick1->GetRawButton(2)){ //button #2
+			else if(stick1->GetRawButton(2)){//Button 2
 				intake0.Set(ControlMode::PercentOutput, -100);
 				intake1.Set(ControlMode::PercentOutput, -100);
 			}
 			else{
 				intake0.Set(ControlMode::PercentOutput, 0);
 				intake1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			if(stick1->GetRawButton(3)){//Button 3
+				clampLeft.Set(DoubleSolenoid::Value::kForward);
+				clampRight.Set(DoubleSolenoid::Value::kForward);
+			}
+			else{
+				clampLeft.Set(DoubleSolenoid::Value::kReverse);
+				clampRight.Set(DoubleSolenoid::Value::kReverse);
 			}
 
 			Wait(0.04);
