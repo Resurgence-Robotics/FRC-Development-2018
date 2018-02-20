@@ -35,16 +35,16 @@ class Robot : public frc::SampleRobot {
 	TalonSRX right1;
 
 	//Lift
-	TalonSRX lift0;
-	TalonSRX lift1;
+	TalonSRX PTO0;
+	TalonSRX PTO1;
 	DigitalInput limTop;
 	DigitalInput limBottom;
 
 	//Intake
-	TalonSRX intake0;
-	TalonSRX intake1;
-	DoubleSolenoid clampLeft;
-	DoubleSolenoid clampRight;
+	TalonSRX pentacept0;
+	TalonSRX pentacept1;
+	DoubleSolenoid clamp;
+	DoubleSolenoid pentaTilt;//Hypathetically
 
 
 public:
@@ -53,23 +53,23 @@ public:
 		LV_MAX_Sonar(3),
 
 		//Drivetrain
-		left0(8),
-		left1(10),
-		right0(9),
-		right1(11),
+		left0(5),
+		left1(9),
+		right0(4),
+		right1(6),
 
 
 		//Lift
-		lift0(12),
-		lift1(15),
+		PTO0(12),
+		PTO1(13),
 		limTop(6),
 		limBottom(7),
 
 		//Intake
-		intake0(13),
-		intake1(14),
-		clampLeft(0, 1),
-		clampRight(2, 3)
+		pentacept0(7),
+		pentacept1(8),
+		clamp(0, 1),
+		//clampRight(2, 3)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
@@ -82,10 +82,17 @@ public:
 		left1.SetNeutralMode(NeutralMode::Coast);
 		right0.SetNeutralMode(NeutralMode::Coast);
 		right1.SetNeutralMode(NeutralMode::Coast);
-		lift0.SetNeutralMode(NeutralMode::Coast);
-		intake0.SetNeutralMode(NeutralMode::Coast);
-		intake1.SetNeutralMode(NeutralMode::Coast);
+		PTO0.SetNeutralMode(NeutralMode::Coast);
+		PTO1.SetNeutralMode(NeutralMode::Coast);
+		pentacept0.SetNeutralMode(NeutralMode::Coast);
+		pentacept1.SetNeutralMode(NeutralMode::Coast);
 
+		//left0.SetInverted(true);
+		//left1.SetInverted(true);
+		
+		//clampLeft.SetInverted(true);
+		
+		
 		clampLeft.Set(DoubleSolenoid::Value::kOff);
 		clampRight.Set(DoubleSolenoid::Value::kOff);
 
@@ -94,6 +101,9 @@ public:
 
 		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		right0.SetSensorPhase(false);
+
+		PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		PTO0.SetSensorPhase(false);
 	}
 
 	void SetSpeed(double left, double right){
@@ -105,17 +115,19 @@ public:
 	}
 
 	void RunIntake(double speed, double time){
-		intake0.Set(ControlMode::PercentOutput, speed);
-		intake1.Set(ControlMode::PercentOutput, speed);
+		pentacept0.Set(ControlMode::PercentOutput, speed);
+		pentacept1.Set(ControlMode::PercentOutput, speed);
 		Wait(time);
-		intake0.Set(ControlMode::PercentOutput, 0.0);
-		intake1.Set(ControlMode::PercentOutput, 0.0);
+		pentacept0.Set(ControlMode::PercentOutput, 0.0);
+		pentacept1.Set(ControlMode::PercentOutput, 0.0);
 	}
 
 	void RunLift(double speed, double time){
-		lift0.Set(ControlMode::PercentOutput, speed);
+		PTO0.Set(ControlMode::PercentOutput, speed);
+		PTO1.Set(ControlMode::PercentOutput, speed);
 		Wait(time);
-		lift0.Set(ControlMode::PercentOutput, 0.0);
+		PTO0.Set(ControlMode::PercentOutput, 0.0);
+		PTO1.Set(ControlMode::PercentOutput, 0.0);
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
@@ -609,39 +621,37 @@ public:
 
 			//Lift (driver 2)
 			if(fabs(stick1->GetY()) >= THRESHOLD){
-				lift0.Set(ControlMode::PercentOutput, stick1->GetY());
-				lift1.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
 			else if(fabs(stick1->GetY())<= THRESHOLD){
-				lift0.Set(ControlMode::PercentOutput, stick1->GetY());
-				lift1.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
 			else{
-				lift0.Set(ControlMode::PercentOutput, 0);
-				lift1.Set(ControlMode::PercentOutput, 0);
+				PTO0.Set(ControlMode::PercentOutput, 0);
+				PTO1.Set(ControlMode::PercentOutput, 0);
 			}
 
 			//Intake (driver 2)
 			if(stick1->GetRawButton(1)){//Trigger button
-				intake0.Set(ControlMode::PercentOutput, 100);
-				intake1.Set(ControlMode::PercentOutput, 100);
+				pentacept0.Set(ControlMode::PercentOutput, 100);
+				pentacept1.Set(ControlMode::PercentOutput, 100);
 			}
 			else if(stick1->GetRawButton(2)){//Button 2
-				intake0.Set(ControlMode::PercentOutput, -100);
-				intake1.Set(ControlMode::PercentOutput, -100);
+				pentacept0.Set(ControlMode::PercentOutput, -100);
+				pentacept1.Set(ControlMode::PercentOutput, -100);
 			}
 			else{
-				intake0.Set(ControlMode::PercentOutput, 0);
-				intake1.Set(ControlMode::PercentOutput, 0);
+				pentacept0.Set(ControlMode::PercentOutput, 0);
+				pentacept1.Set(ControlMode::PercentOutput, 0);
 			}
 
 			if(stick1->GetRawButton(3)){//Button 3
-				clampLeft.Set(DoubleSolenoid::Value::kForward);
-				clampRight.Set(DoubleSolenoid::Value::kForward);
+				clamp.Set(DoubleSolenoid::Value::kForward);
 			}
 			else{
-				clampLeft.Set(DoubleSolenoid::Value::kReverse);
-				clampRight.Set(DoubleSolenoid::Value::kReverse);
+				clamp.Set(DoubleSolenoid::Value::kReverse);
 			}
 
 			Wait(0.04);
