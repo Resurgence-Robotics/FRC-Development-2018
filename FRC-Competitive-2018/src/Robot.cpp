@@ -20,6 +20,8 @@ class Robot : public frc::SampleRobot {
 
 	//System Constants
 	const double THRESHOLD = 0.1;
+	const int LIFT_TOP = 600;
+	const int LIFT_BOTTOM = 0;
 	
 	//Control System
 	Joystick *stick0;
@@ -37,6 +39,7 @@ class Robot : public frc::SampleRobot {
 	//Lift
 	TalonSRX PTO0;
 	TalonSRX PTO1;
+	Encoder *PTO_Enc;
 	DigitalInput limTop;
 	DigitalInput limBottom;
 
@@ -44,7 +47,7 @@ class Robot : public frc::SampleRobot {
 	TalonSRX pentacept0;
 	TalonSRX pentacept1;
 	DoubleSolenoid clamp;
-	DoubleSolenoid pentaTilt;//Hypathetically
+	//DoubleSolenoid pentaTilt;//Hypothetically
 
 
 public:
@@ -53,27 +56,27 @@ public:
 		LV_MAX_Sonar(3),
 
 		//Drivetrain
-		left0(5),
-		left1(9),
+		left0(12),
+		left1(13),
 		right0(4),
 		right1(6),
 
 
 		//Lift
-		PTO0(12),
-		PTO1(13),
+		PTO0(5),
+		PTO1(9),
 		limTop(6),
 		limBottom(7),
 
 		//Intake
 		pentacept0(7),
 		pentacept1(8),
-		clamp(0, 1),
-		//clampRight(2, 3)
+		clamp(0, 1)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
-		m_pdp = new PowerDistributionPanel(),
+		PTO_Enc = new Encoder(0, 1, true, Encoder::EncodingType::k4X);
+		m_pdp = new PowerDistributionPanel();
 		ahrs = new AHRS(SerialPort::kMXP);
 	}
 
@@ -82,19 +85,17 @@ public:
 		left1.SetNeutralMode(NeutralMode::Coast);
 		right0.SetNeutralMode(NeutralMode::Coast);
 		right1.SetNeutralMode(NeutralMode::Coast);
-		PTO0.SetNeutralMode(NeutralMode::Coast);
-		PTO1.SetNeutralMode(NeutralMode::Coast);
+		PTO0.SetNeutralMode(NeutralMode::Brake);
+		PTO1.SetNeutralMode(NeutralMode::Brake);
 		pentacept0.SetNeutralMode(NeutralMode::Coast);
 		pentacept1.SetNeutralMode(NeutralMode::Coast);
 
-		//left0.SetInverted(true);
-		//left1.SetInverted(true);
+		left0.SetInverted(true);
+		left1.SetInverted(true);
+		PTO0.SetInverted(true);
+		PTO1.SetInverted(true);
 		
-		//clampLeft.SetInverted(true);
-		
-		
-		clampLeft.Set(DoubleSolenoid::Value::kOff);
-		clampRight.Set(DoubleSolenoid::Value::kOff);
+		clamp.Set(DoubleSolenoid::Value::kOff);
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		left0.SetSensorPhase(false);
@@ -102,8 +103,8 @@ public:
 		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		right0.SetSensorPhase(false);
 
-		PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
-		PTO0.SetSensorPhase(false);
+		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		//PTO0.SetSensorPhase(false);
 	}
 
 	void SetSpeed(double left, double right){
@@ -114,6 +115,18 @@ public:
 		printf("SetSpeed: %f, %f\n", left, right);
 	}
 
+	void SetIntakeSpeed(double speed){
+		pentacept0.Set(ControlMode::PercentOutput, speed);
+		pentacept1.Set(ControlMode::PercentOutput, speed);
+		printf("SetSpeed: %f\n", speed);
+	}
+
+	void SetLiftSpeed(double speed){
+		PTO0.Set(ControlMode::PercentOutput, speed);
+		PTO1.Set(ControlMode::PercentOutput, speed);
+		printf("SetSpeed: %f\n", speed);
+	}
+
 	void RunIntake(double speed, double time){
 		pentacept0.Set(ControlMode::PercentOutput, speed);
 		pentacept1.Set(ControlMode::PercentOutput, speed);
@@ -122,12 +135,69 @@ public:
 		pentacept1.Set(ControlMode::PercentOutput, 0.0);
 	}
 
-	void RunLift(double speed, double time){
+	void RunLiftTime(double speed, double time){
 		PTO0.Set(ControlMode::PercentOutput, speed);
 		PTO1.Set(ControlMode::PercentOutput, speed);
 		Wait(time);
 		PTO0.Set(ControlMode::PercentOutput, 0.0);
 		PTO1.Set(ControlMode::PercentOutput, 0.0);
+	}
+
+	void RunLiftPosition(double position){
+		double setPoint = Map(position, 0, 100, LIFT_BOTTOM, LIFT_TOP);//Converts from percent to encoder counts
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 0;
+		double kI = 0;
+		double kD = 0;
+
+		double output;
+		double error = setPoint - PTO_Enc->Get();
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = setPoint - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			if(setPoint < 0){
+				SetLiftSpeed(output);
+			}
+			else if(setPoint > 0){
+				SetLiftSpeed(-output);
+			}
+			else{
+				printf("setPoint = 0");
+			}
+
+			if(fabs(error) < 1){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", setPoint);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		printf("PID Complete\n");
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
@@ -572,7 +642,7 @@ public:
 			PIDTurn(-90);
 			DriveStraightPID(36, 0.7);
 			PIDTurn(90);
-			RunLift(1.0, 1);
+			RunLiftTime(1.0, 1);
 			DriveSonar(5);
 			RunIntake(1.0, 2);
 		}
@@ -581,7 +651,7 @@ public:
 			PIDTurn(90);
 			DriveStraightPID(36, 0.7);
 			PIDTurn(-90);
-			RunLift(1.0, 1);
+			RunLiftTime(1.0, 1);
 			DriveSonar(5);
 			RunIntake(1.0, 2);
 		}
@@ -590,6 +660,10 @@ public:
 	void OperatorControl() override{
 		double left;
 		double right;
+
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
+		PTO0.SetSelectedSensorPosition(0, 0, 0);
 
 		while(IsEnabled() && IsOperatorControl()){
 			//Arcade
@@ -620,11 +694,7 @@ public:
 			}
 
 			//Lift (driver 2)
-			if(fabs(stick1->GetY()) >= THRESHOLD){
-				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
-				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
-			}
-			else if(fabs(stick1->GetY())<= THRESHOLD){
+			if(fabs((stick1->GetY()) >= THRESHOLD)){//Should add limits based on mag switch or encoder
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
@@ -653,6 +723,10 @@ public:
 			else{
 				clamp.Set(DoubleSolenoid::Value::kReverse);
 			}
+
+			printf("Left Encoder: %d\n", left0.GetSelectedSensorPosition(0));
+			printf("Right Encoder: %d\n", right0.GetSelectedSensorPosition(0));
+			printf("PTO Encoder: %d\n", PTO_Enc->Get());
 
 			Wait(0.04);
 		}
