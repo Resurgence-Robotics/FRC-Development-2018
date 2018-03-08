@@ -1,0 +1,830 @@
+#include <iostream>
+#include <string>
+
+#include <Joystick.h>
+#include <SampleRobot.h>
+#include <SmartDashboard/SendableChooser.h>
+#include <SmartDashboard/SmartDashboard.h>
+
+#include <Timer.h>
+#include <wpilib.h>
+#include <Math.h>
+#include <ctre/Phoenix.h>
+#include <ctre/phoenix/MotorControl/ControlMode.h>
+#include <ctre/phoenix/MotorControl/NeutralMode.h>
+#include <ctre/phoenix/MotorControl/FeedbackDevice.h>
+#include <AHRS.h>
+
+
+class Practice : public frc::SampleRobot {
+
+	//System Constants
+	const double THRESHOLD = 0.1;
+	const int LIFT_TOP = 600;
+	const int LIFT_BOTTOM = 0;
+	const bool TOP = true;
+	const bool BOTTOM = false;
+
+	//Control System
+	Joystick *stick0;
+	Joystick *stick1;
+	PowerDistributionPanel* m_pdp;
+	AHRS *ahrs;
+	AnalogInput LV_MAX_Sonar;
+
+	//Drivetrain
+	TalonSRX left0;
+	TalonSRX left1;
+	TalonSRX right0;
+	TalonSRX right1;
+
+	//Lift
+	TalonSRX PTO0;
+	TalonSRX PTO1;
+	Encoder *PTO_Enc;
+	DigitalInput limTop;
+	DigitalInput limBottom;
+
+	//Intake
+	Spark pentacept0;
+	Spark pentacept1;
+	DoubleSolenoid clamp;
+	DoubleSolenoid pentaTilt;
+
+	//LED
+	Relay *redLED;
+	Relay *greenLED;
+	Relay *blueLED;
+
+public:
+	Practice():
+		//Control System
+		LV_MAX_Sonar(3),
+
+		//Drivetrain
+		left0(0),
+		left1(1),
+		right0(10),
+		right1(11),
+
+		//Lift
+		PTO0(2),
+		PTO1(3),
+		limTop(3),
+		limBottom(4),
+
+		//Intake
+		pentacept0(0),
+		pentacept1(1),
+		clamp(0, 4),
+		pentaTilt(1, 5)
+	{
+		stick0 = new Joystick(0);
+		stick1 = new Joystick(1);
+		PTO_Enc = new Encoder(0, 1, true, Encoder::EncodingType::k4X);
+		m_pdp = new PowerDistributionPanel();
+		ahrs = new AHRS(SerialPort::kMXP);
+		redLED = new Relay(0);
+		greenLED = new Relay(1);
+		blueLED = new Relay(2);
+	}
+
+	void RobotInit() {
+		left0.SetNeutralMode(NeutralMode::Coast);
+		left1.SetNeutralMode(NeutralMode::Coast);
+		right0.SetNeutralMode(NeutralMode::Coast);
+		right1.SetNeutralMode(NeutralMode::Coast);
+		PTO0.SetNeutralMode(NeutralMode::Brake);
+		PTO1.SetNeutralMode(NeutralMode::Brake);
+
+
+		left0.SetInverted(true);
+		left1.SetInverted(true);
+		PTO0.SetInverted(true);
+		PTO1.SetInverted(true);
+
+		clamp.Set(DoubleSolenoid::Value::kOff);
+		pentaTilt.Set(DoubleSolenoid::Value::kOff);
+
+		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		left0.SetSensorPhase(false);
+
+		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		right0.SetSensorPhase(false);
+
+		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
+		//PTO0.SetSensorPhase(false);
+		printf("Practice Robot Online");
+	}
+
+	void SetSpeed(double left, double right){
+		left0.Set(ControlMode::PercentOutput, left);
+		left1.Set(ControlMode::PercentOutput, left);
+		right0.Set(ControlMode::PercentOutput, right);
+		right1.Set(ControlMode::PercentOutput, right);
+		printf("SetSpeed: %f, %f\n", left, right);
+	}
+
+	void SetIntakeSpeed(double speed){
+		pentacept0.Set(speed);
+		pentacept1.Set(speed);
+		printf("SetSpeed: %f\n", speed);
+	}
+
+	void SetLiftSpeed(double speed){
+		PTO0.Set(ControlMode::PercentOutput, speed);
+		PTO1.Set(ControlMode::PercentOutput, speed);
+		printf("SetSpeed: %f\n", speed);
+	}
+
+	void RunIntake(double speed, double time){
+		pentacept0.Set(speed);
+		pentacept1.Set(speed);
+		Wait(time);
+		pentacept0.Set(0.0);
+		pentacept1.Set(0.0);
+	}
+
+	void RunLiftTime(double speed, double time){
+		PTO0.Set(ControlMode::PercentOutput, speed);
+		PTO1.Set(ControlMode::PercentOutput, speed);
+		Wait(time);
+		PTO0.Set(ControlMode::PercentOutput, 0.0);
+		PTO1.Set(ControlMode::PercentOutput, 0.0);
+	}
+
+	void RunLiftLimits(bool side){
+		if(side){
+			while(!limTop.Get() && IsEnabled()){
+				PTO0.Set(ControlMode::PercentOutput, 0.7);
+				PTO1.Set(ControlMode::PercentOutput, 0.7);
+			}
+		}
+		else{
+			while(!limBottom.Get() && IsEnabled()){
+				PTO0.Set(ControlMode::PercentOutput, -0.7);
+				PTO1.Set(ControlMode::PercentOutput, -0.7);
+			}
+		}
+		PTO0.Set(ControlMode::PercentOutput, 0.0);
+		PTO1.Set(ControlMode::PercentOutput, 0.0);
+	}
+
+	void RunLiftPosition(double position){
+		double setPoint = Map(position, 0, 100, LIFT_BOTTOM, LIFT_TOP);//Converts from percent to encoder counts
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 0;
+		double kI = 0;
+		double kD = 0;
+
+		double output;
+		double error = setPoint - PTO_Enc->Get();
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = setPoint - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			if(setPoint < 0){
+				SetLiftSpeed(output);
+			}
+			else if(setPoint > 0){
+				SetLiftSpeed(-output);
+			}
+			else{
+				printf("setPoint = 0");
+			}
+
+			if(fabs(error) < 1){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", setPoint);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		printf("PID Complete\n");
+	}
+
+	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
+		return ((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min);
+	}
+
+	//The reference I used for PID: http://robotsforroboticists.com/pid-control/
+	void PIDTurn45(int angle){ //Positive number for clockwise, Negative for anti-clockwise
+		ahrs->Reset();
+		Wait(1);
+
+		angle = (angle > 0) ? -45 : 45;
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+
+		double error = angle - ahrs->GetYaw();
+		double output;
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				SetSpeed(output, -output);
+			}
+			else if(angle > 0){
+				SetSpeed(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			if(fabs(error) < 1){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		SetSpeed(0.0, 0.0);
+
+		printf("PID Complete\n");
+	}
+
+	void PIDTurn90(int angle){ //Positive number for clockwise, Negative for anti-clockwise
+		ahrs->Reset();
+		Wait(1);
+
+		angle = (angle > 0) ? -90 : 90;
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+
+		double error = angle - ahrs->GetYaw();
+		double output;
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				SetSpeed(output, -output);
+			}
+			else if(angle > 0){
+				SetSpeed(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			if(fabs(error) < 1){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		SetSpeed(0.0, 0.0);
+
+		printf("PID Complete\n");
+	}
+
+	void PIDTurn(int angle){ //Positive number for clockwise, Negative for anti-clockwise
+		ahrs->Reset();
+		Wait(1);
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+
+		double error = angle - ahrs->GetYaw();
+		double output;
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				SetSpeed(output, -output);
+			}
+			else if(angle > 0){
+				SetSpeed(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			if(fabs(error) < 1){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		SetSpeed(0.0, 0.0);
+
+		printf("PID Complete\n");
+	}
+
+	void PIDTuner(){
+		ahrs->Reset();
+		Wait(3);
+
+
+		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
+		double integral = 0;//Integral starts at 0 since that's how integral work
+		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+
+		double kP = 0;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kD = 0;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
+		double angle = 0;
+		bool hold = true;
+
+		SmartDashboard::PutNumber("kP", kP);
+		SmartDashboard::PutNumber("kI", kI);
+		SmartDashboard::PutNumber("kD", kD);
+		SmartDashboard::PutNumber("Angle", angle);
+		SmartDashboard::PutBoolean("Hold", hold);
+
+		double output;
+		double error;
+
+		while((IsEnabled() && IsAutonomous())){
+
+			kP = SmartDashboard::GetNumber("kP", 0);
+			kI = SmartDashboard::GetNumber("kI", 0);
+			kD = SmartDashboard::GetNumber("kD", 0);
+			angle = SmartDashboard::GetNumber("Angle", 0);
+			hold = SmartDashboard::GetBoolean("Hold", true);
+
+			while(hold){
+				kP = SmartDashboard::GetNumber("kP", 0);
+				kI = SmartDashboard::GetNumber("kI", 0);
+				kD = SmartDashboard::GetNumber("kD", 0);
+				angle = SmartDashboard::GetNumber("Angle", 0);
+				hold = SmartDashboard::GetBoolean("Hold", true);
+			}
+
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			//printf("Pre Calculations\n");
+			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
+
+			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
+
+			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
+
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				SetSpeed(output, -output);
+			}
+			else if(angle > 0){
+				SetSpeed(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			errorPrior = error;//Set previous error to this iterations error for next time
+
+			//printf("Pre Print\n");
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Derivative", derivative);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+	}
+
+	double SonarSensor(){
+		double supplied_voltage =5;
+		double vi= 270/supplied_voltage;
+		double distance = LV_MAX_Sonar.GetAverageVoltage() * vi;
+
+		//printf("\n Distance:%f", distance);
+		return distance;
+	}
+
+	void DriveSonar(double distance){
+		double sonar = SonarSensor();
+
+		while(sonar > distance){
+			SetSpeed(0.6, 0.6);
+		}
+	}
+
+	void DriveFRC(double outputMagnitude, double curve){
+		double leftOutput, rightOutput;
+		double m_sensitivity = 0.05;
+		if (curve < 0){
+			double value = log(-curve);
+			double ratio = (value - m_sensitivity)/(value + m_sensitivity);
+
+			if (ratio == 0){ ratio =.0000000001;}
+
+			leftOutput = outputMagnitude / ratio;
+			rightOutput = outputMagnitude;
+		}
+		else if (curve > 0){
+			double value = log(curve);
+			double ratio = (value - m_sensitivity)/(value + m_sensitivity);
+
+			if (ratio == 0){ ratio =.0000000001;}
+
+			leftOutput = outputMagnitude;
+			rightOutput = outputMagnitude / ratio;
+		}
+		else{
+			leftOutput = outputMagnitude;
+			rightOutput = outputMagnitude;
+		}
+		SetSpeed(rightOutput, leftOutput);
+	}
+
+	void DrivePID(double distance, double speed){//Drives with Encoders in PID loop
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);
+		ahrs->GetYaw();
+
+		double wheelRadius = 2;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		double integral = 0;
+		double kP = 0.125;
+		double kI = 0.05;
+		double output = 0;
+		double iterationTime = 0.1;
+		int timeBuffer = 0;
+
+		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
+			error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+			integral = integral + (error*iterationTime);
+
+			output = (kP * error) + (kI * integral);
+
+			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
+
+			SetSpeed(-output, -output);
+
+			if(error > 50 || error < -50){
+				timeBuffer = 0;
+			}
+			else{
+				timeBuffer++;
+			}
+
+
+			printf("Time Buffer: %i\n", timeBuffer);
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", EncTarget);
+			SmartDashboard::PutNumber("Current Encoder", right1.GetSelectedSensorPosition(0));
+
+			Wait(iterationTime);
+		}
+		printf("Finished PID\n");
+		SetSpeed(0.0, 0.0);
+	}
+
+	void DriveStraightPID(double distance, double speed){//Drives with Encoders and Gyro in PID loop
+		left1.SetSelectedSensorPosition(0, 0, 0);
+		right1.SetSelectedSensorPosition(0, 0, 0);
+		ahrs->GetYaw();
+
+		double wheelRadius = 2;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		double integral = 0;
+		double kP = 0.125;
+		double kI = 0.05;
+		double gP = 0.125;
+		double output = 0;
+		double iterationTime = 0.1;
+		double gyroCorrection = 0;
+		int timeBuffer = 0;
+
+		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
+			error = EncTarget - right1.GetSelectedSensorPosition(0);
+
+			integral = integral + (error*iterationTime);
+
+			output = (kP * error) + (kI * integral);
+
+			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
+
+			gyroCorrection = gP * ahrs->GetYaw();
+
+			printf("Gyro Correction: %f\n", gyroCorrection);
+
+			DriveFRC(-output, gyroCorrection);
+
+			if(error > 50 || error < -50){
+				timeBuffer = 0;
+			}
+			else{
+				timeBuffer++;
+			}
+
+
+			printf("Time Buffer: %i\n", timeBuffer);
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Integral", integral);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", EncTarget);
+			SmartDashboard::PutNumber("Current Encoder", right1.GetSelectedSensorPosition(0));
+
+			Wait(iterationTime);
+		}
+		printf("Finished PID\n");
+		SetSpeed(0.0, 0.0);
+	}
+
+	void Autonomous(){
+		//http://wpilib.screenstepslive.com/s/currentCS/m/getting_started/l/826278-2018-game-data-details
+		std::string gameData;
+		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
+		char position = 'L';//Starting positions: R, C, L
+
+		//Prototype Middle Start Auto
+		if(gameData[0] == 'L'){  //if the switch we are trying to score in is on the left
+			if(position == 'R'){
+
+			}
+			else if(position == 'C'){
+				DriveStraightPID(20, 0.7);
+				PIDTurn(-90);
+				DriveStraightPID(36, 0.7);
+				PIDTurn(90);
+				RunLiftTime(1.0, 1);
+				DriveSonar(5);
+				RunIntake(1.0, 2);
+			}
+			else if(position == 'L'){
+
+			}
+			else{
+				printf("No Position Data");
+			}
+		}
+		else if(gameData[0] == 'R'){
+			if(position == 'R'){
+
+			}
+			else if(position == 'C'){
+				DriveStraightPID(20, 0.7);
+				PIDTurn(90);
+				DriveStraightPID(36, 0.7);
+				PIDTurn(-90);
+				RunLiftTime(1.0, 1);
+				DriveSonar(5);
+				RunIntake(1.0, 2);
+			}
+			else if(position == 'L'){
+
+			}
+			else{
+				printf("No Position Data");
+			}
+		}
+		else{
+			printf("No Game Data");
+		}
+	}
+
+	void OperatorControl() override{
+		double left;
+		double right;
+
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
+		PTO0.SetSelectedSensorPosition(0, 0, 0);
+
+		while(IsEnabled() && IsOperatorControl()){
+			//Arcade
+			left = stick0->GetY() - stick0->GetX();
+			right = stick0->GetY() + stick0->GetX();
+
+			//Tank
+			//left = stick0->GetY();
+			//right = stick1->GetY();
+
+			//Drive Train (driver 1)
+			if(fabs(left) >= THRESHOLD){
+				left0.Set(ControlMode::PercentOutput, left);
+				left1.Set(ControlMode::PercentOutput, left);
+			}
+			else{
+				left0.Set(ControlMode::PercentOutput, 0);
+				left1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			if(fabs(right) >= THRESHOLD){
+				right0.Set(ControlMode::PercentOutput, right);
+				right1.Set(ControlMode::PercentOutput, right);
+			}
+			else{
+				right0.Set(ControlMode::PercentOutput, 0);
+				right1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			//Lift (driver 2)
+			if(stick1->GetY() >= THRESHOLD && !limTop.Get()){//Upper limits
+				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else if(stick1->GetY() <= -THRESHOLD && !limBottom.Get()){//Lower limits
+				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else{
+				PTO0.Set(ControlMode::PercentOutput, 0);
+				PTO1.Set(ControlMode::PercentOutput, 0);
+			}
+
+			//Intake (driver 2)
+			if(stick1->GetRawButton(1)){//Trigger button
+				pentacept0.Set(100);
+				pentacept1.Set(100);
+			}
+			else if(stick1->GetRawButton(2)){//Button 2
+				pentacept0.Set(-100);
+				pentacept1.Set(-100);
+			}
+			else{
+				pentacept0.Set(0.0);
+				pentacept1.Set(0.0);
+			}
+
+			if(stick1->GetRawButton(3)){//Button 3
+				clamp.Set(DoubleSolenoid::Value::kForward);
+			}
+			else{
+				clamp.Set(DoubleSolenoid::Value::kReverse);
+			}
+
+			if(stick1->GetRawButton(4)){
+				pentaTilt.Set(DoubleSolenoid::Value::kForward);
+			}
+			else{
+				pentaTilt.Set(DoubleSolenoid::Value::kReverse);
+			}
+
+			if(stick0->GetRawButton(5)){
+				redLED->Set(Relay::Value::kForward);
+			}
+			else{
+				redLED->Set(Relay::Value::kOff);
+			}
+
+			if(stick0->GetRawButton(2)){
+				greenLED->Set(Relay::Value::kForward);
+			}
+			else{
+				greenLED->Set(Relay::Value::kOff);
+			}
+
+			if(stick0->GetRawButton(6)){
+				blueLED->Set(Relay::Value::kForward);
+			}
+			else{
+				blueLED->Set(Relay::Value::kOff);
+			}
+
+
+			printf("Left Encoder: %d\n", left0.GetSelectedSensorPosition(0));
+			printf("Right Encoder: %d\n", right0.GetSelectedSensorPosition(0));
+			printf("PTO Encoder: %d\n", PTO_Enc->Get());
+			printf("Top %i, Bottom %i\n", !limTop.Get(), !limBottom.Get());
+
+			Wait(0.04);
+		}
+	}
+
+
+	void Test() override {
+
+	}
+
+private:
+
+};
+
+START_ROBOT_CLASS(Practice)

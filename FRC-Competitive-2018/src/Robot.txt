@@ -105,6 +105,8 @@ public:
 
 		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		//PTO0.SetSensorPhase(false);
+		
+		printf("Valentina Tereshkova, Reporting for duty.");
 	}
 
 	void SetSpeed(double left, double right){
