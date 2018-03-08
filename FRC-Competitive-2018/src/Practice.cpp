@@ -26,6 +26,7 @@ class Practice : public frc::SampleRobot {
 	const bool BOTTOM = false;
 
 	//Control System
+	SendableChooser<char> chooser;
 	Joystick *stick0;
 	Joystick *stick1;
 	PowerDistributionPanel* m_pdp;
@@ -59,6 +60,7 @@ class Practice : public frc::SampleRobot {
 public:
 	Practice():
 		//Control System
+		chooser(),
 		LV_MAX_Sonar(3),
 
 		//Drivetrain
@@ -114,6 +116,23 @@ public:
 
 		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		//PTO0.SetSensorPhase(false);
+
+		chooser.AddDefault("Emergency", 'a');//Stuff is borked, cross the auto line and blame mechanical
+
+		chooser.AddObject("Right", 'b');//Starting on the right for the switch
+		chooser.AddObject("Center", 'c');//Starting on the center for the switch
+		chooser.AddObject("Left", 'd');//Starting on the left for the switch
+
+		chooser.AddObject("Right Scale", 'e');//Starting on the right for scale
+		chooser.AddObject("Center Scale", 'f');//Starting on the center for scale
+		chooser.AddObject("Left Scale", 'g');//Starting on the left for scale
+
+		chooser.AddObject("Right 2 Cube", 'h');//Starting on the right for 2 cube
+		chooser.AddObject("Center 2 Cube", 'i');//Starting on the center for 2 cube
+		chooser.AddObject("Left 2 Cube", 'j');//Starting on the left for 2 cube
+
+		SmartDashboard::PutData("Autonomous Modes", &chooser);
+
 		printf("Practice Robot Online");
 	}
 
@@ -546,7 +565,7 @@ public:
 		right1.SetSelectedSensorPosition(0, 0, 0);
 		ahrs->GetYaw();
 
-		double wheelRadius = 2;
+		double wheelRadius = 3;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
 		double PPR = 1440; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
@@ -601,7 +620,7 @@ public:
 		right1.SetSelectedSensorPosition(0, 0, 0);
 		ahrs->GetYaw();
 
-		double wheelRadius = 2;
+		double wheelRadius = 3;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
 		double PPR = 1440; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
@@ -661,14 +680,18 @@ public:
 		//http://wpilib.screenstepslive.com/s/currentCS/m/getting_started/l/826278-2018-game-data-details
 		std::string gameData;
 		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
-		char position = 'L';//Starting positions: R, C, L
+
+		char autoChoice = 'z';
+		autoChoice = chooser.GetSelected();
+
+		printf("%c", autoChoice);
 
 		//Prototype Middle Start Auto
 		if(gameData[0] == 'L'){  //if the switch we are trying to score in is on the left
-			if(position == 'R'){
+			if(0 == 0){
 
 			}
-			else if(position == 'C'){
+			else if(0 == 0){
 				DriveStraightPID(20, 0.7);
 				PIDTurn(-90);
 				DriveStraightPID(36, 0.7);
@@ -677,7 +700,7 @@ public:
 				DriveSonar(5);
 				RunIntake(1.0, 2);
 			}
-			else if(position == 'L'){
+			else if(0 == 0){
 
 			}
 			else{
@@ -685,10 +708,10 @@ public:
 			}
 		}
 		else if(gameData[0] == 'R'){
-			if(position == 'R'){
+			if(0 == 0){
 
 			}
-			else if(position == 'C'){
+			else if(0 == 0){
 				DriveStraightPID(20, 0.7);
 				PIDTurn(90);
 				DriveStraightPID(36, 0.7);
@@ -697,7 +720,7 @@ public:
 				DriveSonar(5);
 				RunIntake(1.0, 2);
 			}
-			else if(position == 'L'){
+			else if(0 == 0){
 
 			}
 			else{
