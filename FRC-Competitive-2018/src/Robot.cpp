@@ -22,6 +22,10 @@ class Robot : public frc::SampleRobot {
 	const double THRESHOLD = 0.1;
 	const int LIFT_TOP = 600;
 	const int LIFT_BOTTOM = 0;
+	const bool TOP = true;
+	const bool BOTTOM = false;
+	const bool OPEN = true;
+	const bool CLOSED = false;
 	
 	//Control System
 	Joystick *stick0;
@@ -47,8 +51,13 @@ class Robot : public frc::SampleRobot {
 	TalonSRX pentacept0;
 	TalonSRX pentacept1;
 	DoubleSolenoid clamp;
-	//DoubleSolenoid pentaTilt;//Hypothetically
+	DoubleSolenoid pentaTilt;
+	DigitalInput boxSensor;
 
+	//LED
+	Relay *redLED;
+	Relay *greenLED;
+	Relay *blueLED;
 
 public:
 	Robot():
@@ -61,7 +70,6 @@ public:
 		right0(4),
 		right1(6),
 
-
 		//Lift
 		PTO0(5),
 		PTO1(9),
@@ -71,13 +79,18 @@ public:
 		//Intake
 		pentacept0(7),
 		pentacept1(8),
-		clamp(0, 1)
+		clamp(0, 1),
+		pentaTilt(2, 3),
+		boxSensor(5)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
 		PTO_Enc = new Encoder(0, 1, true, Encoder::EncodingType::k4X);
 		m_pdp = new PowerDistributionPanel();
 		ahrs = new AHRS(SerialPort::kMXP);
+		redLED = new Relay(0);
+		greenLED = new Relay(1);
+		blueLED = new Relay(2);
 	}
 
 	void RobotInit() {
@@ -96,6 +109,8 @@ public:
 		PTO1.SetInverted(true);
 		
 		clamp.Set(DoubleSolenoid::Value::kOff);
+		pentaTilt.Set(DoubleSolenoid::Value::kOff);
+
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		left0.SetSensorPhase(false);
@@ -137,10 +152,36 @@ public:
 		pentacept1.Set(ControlMode::PercentOutput, 0.0);
 	}
 
+	void ClampToggle(bool state){
+		if(state){
+			clamp.Set(DoubleSolenoid::Value::kForward);
+		}
+		else{
+			clamp.Set(DoubleSolenoid::Value::kReverse);
+		}
+	}
+
 	void RunLiftTime(double speed, double time){
 		PTO0.Set(ControlMode::PercentOutput, speed);
 		PTO1.Set(ControlMode::PercentOutput, speed);
 		Wait(time);
+		PTO0.Set(ControlMode::PercentOutput, 0.0);
+		PTO1.Set(ControlMode::PercentOutput, 0.0);
+	}
+
+	void RunLiftLimits(bool side){
+		if(side){
+			while(limTop.Get() && IsEnabled()){
+				PTO0.Set(ControlMode::PercentOutput, 0.7);
+				PTO1.Set(ControlMode::PercentOutput, 0.7);
+			}
+		}
+		else{
+			while(limBottom.Get() && IsEnabled()){
+				PTO0.Set(ControlMode::PercentOutput, -0.7);
+				PTO1.Set(ControlMode::PercentOutput, -0.7);
+			}
+		}
 		PTO0.Set(ControlMode::PercentOutput, 0.0);
 		PTO1.Set(ControlMode::PercentOutput, 0.0);
 	}
@@ -517,8 +558,8 @@ public:
 	}
 
 	void DrivePID(double distance, double speed){//Drives with Encoders in PID loop
-		left1.SetSelectedSensorPosition(0, 0, 0);
-		right1.SetSelectedSensorPosition(0, 0, 0);
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
 		ahrs->GetYaw();
 
 		double wheelRadius = 2;
@@ -536,10 +577,10 @@ public:
 		double iterationTime = 0.1;
 		int timeBuffer = 0;
 
-		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+		double error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - right1.GetSelectedSensorPosition(0);
+			error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
@@ -572,11 +613,11 @@ public:
 	}
 
 	void DriveStraightPID(double distance, double speed){//Drives with Encoders and Gyro in PID loop
-		left1.SetSelectedSensorPosition(0, 0, 0);
-		right1.SetSelectedSensorPosition(0, 0, 0);
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
 		ahrs->GetYaw();
 
-		double wheelRadius = 2;
+		double wheelRadius = 3;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
 		double PPR = 1440; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
@@ -593,14 +634,14 @@ public:
 		double gyroCorrection = 0;
 		int timeBuffer = 0;
 
-		double error = EncTarget - right1.GetSelectedSensorPosition(0);
+		double error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - right1.GetSelectedSensorPosition(0);
+			error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
-			output = (kP * error) + (kI * integral);
+			output = (-kP * error) + (-kI * integral);
 
 			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
 
@@ -617,7 +658,9 @@ public:
 				timeBuffer++;
 			}
 
-
+			printf("Encoder: %i\n", right0.GetSelectedSensorPosition(0));
+			printf("Target: %f\n", EncTarget);
+			printf("Error: %f\n", error);
 			printf("Time Buffer: %i\n", timeBuffer);
 			SmartDashboard::PutNumber("Proportional", kP * error);
 			SmartDashboard::PutNumber("Integral", integral);
@@ -637,26 +680,80 @@ public:
 		std::string gameData;
 		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
 
+		int startPos = 1;//0 = Default, 1 = Right, 2 = Center, 3 = Left
+		char allianceSwitch = gameData[0];
+		char scale = gameData[1];
 
-		//Prototype Middle Start Auto
-		if(gameData[0] == 'L'){  //if the switch we are trying to score in is on the left
-			DriveStraightPID(20, 0.7);
-			PIDTurn(-90);
-			DriveStraightPID(36, 0.7);
-			PIDTurn(90);
-			RunLiftTime(1.0, 1);
-			DriveSonar(5);
-			RunIntake(1.0, 2);
+		DriveStraightPID(20, 0.7);
+
+		/*
+		if(startPos == 1){//Starting: Right
+			if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the wrong side
+				DriveStraightPID(120, 0.7);//Cross the auto line and stop
+			}
+			else if(allianceSwitch == 'R' && scale == 'L'){//If switch is right and scale is wrong
+				DriveStraightPID(120, 0.7);//Score Switch
+				PIDTurn(-90);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
+			else if(allianceSwitch == 'L' && scale == 'R'){//If scale is right and switch is wrong
+				DriveStraightPID(240, 0.7);//Score Scale
+				PIDTurn(-90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+			else if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the right side
+				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
+				PIDTurn(-90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
 		}
-		else{
-			DriveStraightPID(20, 0.7);
-			PIDTurn(90);
-			DriveStraightPID(36, 0.7);
-			PIDTurn(-90);
-			RunLiftTime(1.0, 1);
-			DriveSonar(5);
-			RunIntake(1.0, 2);
+		else if(startPos == 2){//Starting: Center
+			if(allianceSwitch == 'L'){//If switch is left
+				DriveStraightPID(40, 0.7);//Score Switch
+				PIDTurn(-90);
+				DriveStraightPID(36, 0.7);
+				PIDTurn(90);
+				DriveSonar(5);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
+			else if(allianceSwitch == 'R'){//If switch is right
+				DriveStraightPID(40, 0.7);//Score Switch
+				PIDTurn(90);
+				DriveStraightPID(36, 0.7);
+				PIDTurn(-90);
+				DriveSonar(5);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
 		}
+		else if(startPos == 3){//Starting: Left
+			if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the wrong side
+				DriveStraightPID(120, 0.7);//Cross the auto line and stop
+			}
+			else if(allianceSwitch == 'L' && scale == 'R'){//If switch is right and scale is wrong
+				DriveStraightPID(120, 0.7);//Score Switch
+				PIDTurn(90);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
+			else if(allianceSwitch == 'R' && scale == 'L'){//If scale is right and switch is wrong
+				DriveStraightPID(240, 0.7);//Score Scale
+				PIDTurn(90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+			else if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the right side
+				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
+				PIDTurn(90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+		}
+		*/
 	}
 
 	void OperatorControl() override{
@@ -726,9 +823,39 @@ public:
 				clamp.Set(DoubleSolenoid::Value::kReverse);
 			}
 
+			if(stick1->GetRawButton(4)){
+				pentaTilt.Set(DoubleSolenoid::Value::kForward);
+			}
+			else{
+				pentaTilt.Set(DoubleSolenoid::Value::kReverse);
+			}
+
+			if(stick0->GetRawButton(5)){
+				redLED->Set(Relay::Value::kForward);
+			}
+			else{
+				redLED->Set(Relay::Value::kOff);
+			}
+
+			if(stick0->GetRawButton(2)){
+				greenLED->Set(Relay::Value::kForward);
+			}
+			else{
+				greenLED->Set(Relay::Value::kOff);
+			}
+
+			if(stick0->GetRawButton(6)){
+				blueLED->Set(Relay::Value::kForward);
+			}
+			else{
+				blueLED->Set(Relay::Value::kOff);
+			}
+
+
 			printf("Left Encoder: %d\n", left0.GetSelectedSensorPosition(0));
 			printf("Right Encoder: %d\n", right0.GetSelectedSensorPosition(0));
 			printf("PTO Encoder: %d\n", PTO_Enc->Get());
+			printf("Top %i, Bottom %i\n", limTop.Get(), limBottom.Get());
 
 			Wait(0.04);
 		}

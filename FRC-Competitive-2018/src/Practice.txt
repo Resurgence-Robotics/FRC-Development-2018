@@ -24,9 +24,10 @@ class Practice : public frc::SampleRobot {
 	const int LIFT_BOTTOM = 0;
 	const bool TOP = true;
 	const bool BOTTOM = false;
+	const bool OPEN = true;
+	const bool CLOSED = false;
 
 	//Control System
-	SendableChooser<char> chooser;
 	Joystick *stick0;
 	Joystick *stick1;
 	PowerDistributionPanel* m_pdp;
@@ -49,8 +50,9 @@ class Practice : public frc::SampleRobot {
 	//Intake
 	Spark pentacept0;
 	Spark pentacept1;
-	DoubleSolenoid clamp;
 	DoubleSolenoid pentaTilt;
+	DoubleSolenoid clamp;
+	DigitalInput boxSensor;
 
 	//LED
 	Relay *redLED;
@@ -60,7 +62,6 @@ class Practice : public frc::SampleRobot {
 public:
 	Practice():
 		//Control System
-		chooser(),
 		LV_MAX_Sonar(3),
 
 		//Drivetrain
@@ -78,8 +79,9 @@ public:
 		//Intake
 		pentacept0(0),
 		pentacept1(1),
-		clamp(0, 4),
-		pentaTilt(1, 5)
+		pentaTilt(0, 4),
+		clamp(1, 5),
+		boxSensor(5)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
@@ -117,22 +119,6 @@ public:
 		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		//PTO0.SetSensorPhase(false);
 
-		chooser.AddDefault("Emergency", 'a');//Stuff is borked, cross the auto line and blame mechanical
-
-		chooser.AddObject("Right", 'b');//Starting on the right for the switch
-		chooser.AddObject("Center", 'c');//Starting on the center for the switch
-		chooser.AddObject("Left", 'd');//Starting on the left for the switch
-
-		chooser.AddObject("Right Scale", 'e');//Starting on the right for scale
-		chooser.AddObject("Center Scale", 'f');//Starting on the center for scale
-		chooser.AddObject("Left Scale", 'g');//Starting on the left for scale
-
-		chooser.AddObject("Right 2 Cube", 'h');//Starting on the right for 2 cube
-		chooser.AddObject("Center 2 Cube", 'i');//Starting on the center for 2 cube
-		chooser.AddObject("Left 2 Cube", 'j');//Starting on the left for 2 cube
-
-		SmartDashboard::PutData("Autonomous Modes", &chooser);
-
 		printf("Practice Robot Online");
 	}
 
@@ -164,6 +150,15 @@ public:
 		pentacept1.Set(0.0);
 	}
 
+	void ClampToggle(bool state){
+		if(state){
+			clamp.Set(DoubleSolenoid::Value::kForward);
+		}
+		else{
+			clamp.Set(DoubleSolenoid::Value::kReverse);
+		}
+	}
+
 	void RunLiftTime(double speed, double time){
 		PTO0.Set(ControlMode::PercentOutput, speed);
 		PTO1.Set(ControlMode::PercentOutput, speed);
@@ -174,13 +169,13 @@ public:
 
 	void RunLiftLimits(bool side){
 		if(side){
-			while(!limTop.Get() && IsEnabled()){
+			while(limTop.Get() && IsEnabled()){
 				PTO0.Set(ControlMode::PercentOutput, 0.7);
 				PTO1.Set(ControlMode::PercentOutput, 0.7);
 			}
 		}
 		else{
-			while(!limBottom.Get() && IsEnabled()){
+			while(limBottom.Get() && IsEnabled()){
 				PTO0.Set(ControlMode::PercentOutput, -0.7);
 				PTO1.Set(ControlMode::PercentOutput, -0.7);
 			}
@@ -681,54 +676,75 @@ public:
 		std::string gameData;
 		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
 
-		char autoChoice = 'z';
-		autoChoice = chooser.GetSelected();
+		int startPos = 1;//0 = Default, 1 = Right, 2 = Center, 3 = Left
+		char allianceSwitch = gameData[0];
+		char scale = gameData[1];
 
-		printf("%c", autoChoice);
-
-		//Prototype Middle Start Auto
-		if(gameData[0] == 'L'){  //if the switch we are trying to score in is on the left
-			if(0 == 0){
-
+		if(startPos == 1){//Starting: Right
+			if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the wrong side
+				DriveStraightPID(120, 0.7);//Cross the auto line and stop
 			}
-			else if(0 == 0){
-				DriveStraightPID(20, 0.7);
+			else if(allianceSwitch == 'R' && scale == 'L'){//If switch is right and scale is wrong
+				DriveStraightPID(120, 0.7);//Score Switch
+				PIDTurn(-90);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
+			else if(allianceSwitch == 'L' && scale == 'R'){//If scale is right and switch is wrong
+				DriveStraightPID(240, 0.7);//Score Scale
+				PIDTurn(-90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+			else if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the right side
+				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
+				PIDTurn(-90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+		}
+		else if(startPos == 2){//Starting: Center
+			if(allianceSwitch == 'L'){//If switch is left
+				DriveStraightPID(40, 0.7);//Score Switch
 				PIDTurn(-90);
 				DriveStraightPID(36, 0.7);
 				PIDTurn(90);
-				RunLiftTime(1.0, 1);
 				DriveSonar(5);
-				RunIntake(1.0, 2);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
 			}
-			else if(0 == 0){
-
-			}
-			else{
-				printf("No Position Data");
-			}
-		}
-		else if(gameData[0] == 'R'){
-			if(0 == 0){
-
-			}
-			else if(0 == 0){
-				DriveStraightPID(20, 0.7);
+			else if(allianceSwitch == 'R'){//If switch is right
+				DriveStraightPID(40, 0.7);//Score Switch
 				PIDTurn(90);
 				DriveStraightPID(36, 0.7);
 				PIDTurn(-90);
-				RunLiftTime(1.0, 1);
 				DriveSonar(5);
-				RunIntake(1.0, 2);
-			}
-			else if(0 == 0){
-
-			}
-			else{
-				printf("No Position Data");
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
 			}
 		}
-		else{
-			printf("No Game Data");
+		else if(startPos == 3){//Starting: Left
+			if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the wrong side
+				DriveStraightPID(120, 0.7);//Cross the auto line and stop
+			}
+			else if(allianceSwitch == 'L' && scale == 'R'){//If switch is right and scale is wrong
+				DriveStraightPID(120, 0.7);//Score Switch
+				PIDTurn(90);
+				RunLiftTime(0.8, 4);
+				ClampToggle(OPEN);
+			}
+			else if(allianceSwitch == 'R' && scale == 'L'){//If scale is right and switch is wrong
+				DriveStraightPID(240, 0.7);//Score Scale
+				PIDTurn(90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
+			else if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the right side
+				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
+				PIDTurn(90);
+				RunLiftLimits(TOP);
+				RunIntake(-1.0, 1);
+			}
 		}
 	}
 
@@ -769,11 +785,11 @@ public:
 			}
 
 			//Lift (driver 2)
-			if(stick1->GetY() >= THRESHOLD && !limTop.Get()){//Upper limits
+			if(stick1->GetY() >= THRESHOLD && limTop.Get()){//Upper limits
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
-			else if(stick1->GetY() <= -THRESHOLD && !limBottom.Get()){//Lower limits
+			else if(stick1->GetY() <= -THRESHOLD && limBottom.Get()){//Lower limits
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
@@ -798,9 +814,11 @@ public:
 
 			if(stick1->GetRawButton(3)){//Button 3
 				clamp.Set(DoubleSolenoid::Value::kForward);
+				printf("Clamp Closed\n");
 			}
 			else{
 				clamp.Set(DoubleSolenoid::Value::kReverse);
+				printf("Clamp Open\n");
 			}
 
 			if(stick1->GetRawButton(4)){
@@ -835,7 +853,7 @@ public:
 			printf("Left Encoder: %d\n", left0.GetSelectedSensorPosition(0));
 			printf("Right Encoder: %d\n", right0.GetSelectedSensorPosition(0));
 			printf("PTO Encoder: %d\n", PTO_Enc->Get());
-			printf("Top %i, Bottom %i\n", !limTop.Get(), !limBottom.Get());
+			printf("Top %i, Bottom %i\n", limTop.Get(), limBottom.Get());
 
 			Wait(0.04);
 		}
