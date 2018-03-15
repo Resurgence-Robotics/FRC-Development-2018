@@ -113,10 +113,10 @@ public:
 
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
-		left0.SetSensorPhase(false);
+		left0.SetSensorPhase(true);
 
 		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
-		right0.SetSensorPhase(false);
+		right0.SetSensorPhase(true);
 
 		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		//PTO0.SetSensorPhase(false);
@@ -562,7 +562,7 @@ public:
 		right0.SetSelectedSensorPosition(0, 0, 0);
 		ahrs->GetYaw();
 
-		double wheelRadius = 2;
+		double wheelRadius = 2.5;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
 		double PPR = 1440; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
@@ -577,10 +577,10 @@ public:
 		double iterationTime = 0.1;
 		int timeBuffer = 0;
 
-		double error = EncTarget - right0.GetSelectedSensorPosition(0);
+		double error = EncTarget - left0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - right0.GetSelectedSensorPosition(0);
+			error = EncTarget - left0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
@@ -615,11 +615,11 @@ public:
 	void DriveStraightPID(double distance, double speed){//Drives with Encoders and Gyro in PID loop
 		left0.SetSelectedSensorPosition(0, 0, 0);
 		right0.SetSelectedSensorPosition(0, 0, 0);
-		ahrs->GetYaw();
+		ahrs->Reset();
 
-		double wheelRadius = 3;
+		double wheelRadius = 2.5;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
-		double PPR = 1440; //tried 831
+		double PPR = 1000; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
 		double EncTarget = distance * encIn; //(60*296.8)=17,808
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
@@ -634,14 +634,14 @@ public:
 		double gyroCorrection = 0;
 		int timeBuffer = 0;
 
-		double error = EncTarget - right0.GetSelectedSensorPosition(0);
+		double error = EncTarget - left0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - right0.GetSelectedSensorPosition(0);
+			error = EncTarget - left0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
-			output = (-kP * error) + (-kI * integral);
+			output = (kP * error) + (kI * integral);
 
 			output = Map(output, -(EncTarget / 10), (EncTarget / 10), -speed, speed);
 
@@ -680,11 +680,16 @@ public:
 		std::string gameData;
 		gameData = frc::DriverStation::GetInstance().GetGameSpecificMessage();
 
+		left0.SetNeutralMode(NeutralMode::Brake);
+		left1.SetNeutralMode(NeutralMode::Brake);
+		right0.SetNeutralMode(NeutralMode::Brake);
+		right1.SetNeutralMode(NeutralMode::Brake);
+
 		int startPos = 1;//0 = Default, 1 = Right, 2 = Center, 3 = Left
 		char allianceSwitch = gameData[0];
 		char scale = gameData[1];
 
-		DriveStraightPID(20, 0.7);
+		DriveStraightPID(30, 0.5);
 
 		/*
 		if(startPos == 1){//Starting: Right
@@ -716,7 +721,7 @@ public:
 				PIDTurn(-90);
 				DriveStraightPID(36, 0.7);
 				PIDTurn(90);
-				DriveSonar(5);
+				DriveStraightPID(30, 0.5);
 				RunLiftTime(0.8, 4);
 				ClampToggle(OPEN);
 			}
@@ -725,7 +730,7 @@ public:
 				PIDTurn(90);
 				DriveStraightPID(36, 0.7);
 				PIDTurn(-90);
-				DriveSonar(5);
+				DriveStraightPID(30, 0.5);
 				RunLiftTime(0.8, 4);
 				ClampToggle(OPEN);
 			}
