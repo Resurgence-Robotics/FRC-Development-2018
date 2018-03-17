@@ -32,7 +32,10 @@ class Robot : public frc::SampleRobot {
 	Joystick *stick1;
 	PowerDistributionPanel* m_pdp;
 	AHRS *ahrs;
-	AnalogInput LV_MAX_Sonar;
+	DigitalInput posRight;
+	DigitalInput posCenter;
+	DigitalInput posLeft;
+	//AnalogInput LV_MAX_Sonar;
 
 	//Drivetrain
 	TalonSRX left0;
@@ -62,7 +65,10 @@ class Robot : public frc::SampleRobot {
 public:
 	Robot():
 		//Control System
-		LV_MAX_Sonar(3),
+		//LV_MAX_Sonar(3),
+		posRight(1),
+		posCenter(2),
+		posLeft(3),
 
 		//Drivetrain
 		left0(12),
@@ -81,11 +87,11 @@ public:
 		pentacept1(8),
 		clamp(0, 1),
 		pentaTilt(2, 3),
-		boxSensor(5)
+		boxSensor(0)
 	{
 		stick0 = new Joystick(0);
 		stick1 = new Joystick(1);
-		PTO_Enc = new Encoder(0, 1, true, Encoder::EncodingType::k4X);
+		PTO_Enc = new Encoder(4, 5, true, Encoder::EncodingType::k4X);
 		m_pdp = new PowerDistributionPanel();
 		ahrs = new AHRS(SerialPort::kMXP);
 		redLED = new Relay(0);
@@ -511,7 +517,7 @@ public:
 			Wait(iterationTime);//Wait the iteration time
 		}
 	}
-
+	/* Removed no sonar sensor on bot
 	double SonarSensor(){
 		double supplied_voltage =5;
 		double vi= 270/supplied_voltage;
@@ -528,7 +534,7 @@ public:
 			SetSpeed(0.6, 0.6);
 		}
 	}
-
+	*/
 	void DriveFRC(double outputMagnitude, double curve){
 		double leftOutput, rightOutput;
 		double m_sensitivity = 0.05;
@@ -685,13 +691,23 @@ public:
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
 
-		int startPos = 1;//0 = Default, 1 = Right, 2 = Center, 3 = Left
+		int startPos = 0;//0 = Default, 1 = Right, 2 = Center, 3 = Left
 		char allianceSwitch = gameData[0];
 		char scale = gameData[1];
 
-		DriveStraightPID(30, 0.5);
+		if(posRight.Get()){
+			startPos = 1;
+		}
+		else if(posCenter.Get()){
+			startPos = 2;
+		}
+		else if(posLeft.Get()){
+			startPos = 3;
+		}
+		else{
+			startPos = 0;
+		}
 
-		/*
 		if(startPos == 1){//Starting: Right
 			if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the wrong side
 				DriveStraightPID(120, 0.7);//Cross the auto line and stop
@@ -758,7 +774,6 @@ public:
 				RunIntake(-1.0, 1);
 			}
 		}
-		*/
 	}
 
 	void OperatorControl() override{
