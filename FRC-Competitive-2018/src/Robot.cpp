@@ -53,8 +53,8 @@ class Robot : public frc::SampleRobot {
 	//Intake
 	TalonSRX pentacept0;
 	TalonSRX pentacept1;
-	DoubleSolenoid clamp;
-	DoubleSolenoid pentaTilt;
+	Solenoid clamp;
+	Solenoid pentaTilt;
 	DigitalInput boxSensor;
 
 	//LED
@@ -85,8 +85,8 @@ public:
 		//Intake
 		pentacept0(7),
 		pentacept1(8),
-		clamp(0, 1),
-		pentaTilt(2, 3),
+		clamp(0),
+		pentaTilt(1),
 		boxSensor(0)
 	{
 		stick0 = new Joystick(0);
@@ -114,8 +114,8 @@ public:
 		PTO0.SetInverted(true);
 		PTO1.SetInverted(true);
 		
-		clamp.Set(DoubleSolenoid::Value::kOff);
-		pentaTilt.Set(DoubleSolenoid::Value::kOff);
+		clamp.Set(false);
+		pentaTilt.Set(false);
 
 
 		left0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
@@ -159,12 +159,7 @@ public:
 	}
 
 	void ClampToggle(bool state){
-		if(state){
-			clamp.Set(DoubleSolenoid::Value::kForward);
-		}
-		else{
-			clamp.Set(DoubleSolenoid::Value::kReverse);
-		}
+			clamp.Set(state);
 	}
 
 	void RunLiftTime(double speed, double time){
@@ -177,23 +172,32 @@ public:
 
 	void RunLiftLimits(bool side){
 		if(side){
-			while(limTop.Get() && IsEnabled()){
+			while(limTop.Get() && (IsEnabled() && IsAutonomous())){
 				PTO0.Set(ControlMode::PercentOutput, 0.7);
 				PTO1.Set(ControlMode::PercentOutput, 0.7);
 			}
 		}
 		else{
-			while(limBottom.Get() && IsEnabled()){
+			while(limBottom.Get() && (IsEnabled() && IsAutonomous())){
 				PTO0.Set(ControlMode::PercentOutput, -0.7);
 				PTO1.Set(ControlMode::PercentOutput, -0.7);
 			}
 		}
 		PTO0.Set(ControlMode::PercentOutput, 0.0);
 		PTO1.Set(ControlMode::PercentOutput, 0.0);
+		printf("Lift complete ENC: %i\n", PTO_Enc->Get());
 	}
 
 	void RunLiftPosition(double position){
-		double setPoint = Map(position, 0, 100, LIFT_BOTTOM, LIFT_TOP);//Converts from percent to encoder counts
+		PTO_Enc->Reset();
+
+		double wheelRadius = 0.25;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 2400; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = position * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
 
 		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
 		double integral = 0;//Integral starts at 0 since that's how integral work
@@ -201,25 +205,25 @@ public:
 		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
 		int timeBuffer = 0;
 
-		double kP = 0;
-		double kI = 0;
-		double kD = 0;
+		double kP = 0.125;
+		double kI = 0.15;
+		double kD = 0.01;
 
 		double output;
-		double error = setPoint - PTO_Enc->Get();
+		double error = EncTarget - PTO_Enc->Get();
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
-			error = setPoint - ahrs->GetYaw();//Error = Final - Current
+			error = EncTarget - ahrs->GetYaw();//Error = Final - Current
 
 			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
 			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
 
 			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
 
-			if(setPoint < 0){
+			if(EncTarget < 0){
 				SetLiftSpeed(output);
 			}
-			else if(setPoint > 0){
+			else if(EncTarget > 0){
 				SetLiftSpeed(-output);
 			}
 			else{
@@ -240,7 +244,7 @@ public:
 			SmartDashboard::PutNumber("Derivative", derivative);
 			SmartDashboard::PutNumber("Output", output);
 			SmartDashboard::PutNumber("Error", error);
-			SmartDashboard::PutNumber("Setpoint", setPoint);
+			SmartDashboard::PutNumber("Setpoint", EncTarget);
 			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
 
 			Wait(iterationTime);//Wait the iteration time
@@ -380,9 +384,66 @@ public:
 		printf("PID Complete\n");
 	}
 
-	void PIDTurn(int angle){ //Positive number for clockwise, Negative for anti-clockwise
+
+
+	void PTurn(int angle){
 		ahrs->Reset();
 		Wait(1);
+
+		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
+		int timeBuffer = 0;
+
+		double kP = 5;
+
+		double error = angle - ahrs->GetYaw();
+		double output;
+
+		while(timeBuffer < 5 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			output = kP * error;//Sum all components together
+			output = Map(output, -angle, angle, -0.7, 0.7);
+
+			if(angle < 0){
+				SetSpeed(output, -output);
+			}
+			else if(angle > 0){
+				SetSpeed(-output, output);
+			}
+			else{
+				printf("Angle = 0");
+			}
+
+			if(fabs(error) < 3){
+				timeBuffer++;
+			}
+			else{
+				timeBuffer = 0;
+			}
+
+			SmartDashboard::PutNumber("Proportional", kP * error);
+			SmartDashboard::PutNumber("Output", output);
+			SmartDashboard::PutNumber("Error", error);
+			SmartDashboard::PutNumber("Setpoint", angle);
+			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
+
+			Wait(iterationTime);//Wait the iteration time
+		}
+
+		SetSpeed(0.0, 0.0);
+		printf("PID Complete\n");
+
+	}
+
+	void PIDTurn(int angle, double timeOut){ //Positive number for clockwise, Negative for anti-clockwise
+		ahrs->Reset();
+		Timer t1;
+		t1.Get();
+		t1.Reset();
+		t1.Start();
+
+		Wait(0.25);
+
 
 		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
 		double integral = 0;//Integral starts at 0 since that's how integral work
@@ -390,15 +451,17 @@ public:
 		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
 		int timeBuffer = 0;
 
-		double kP = 0.6;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
-		double kI = 0.2;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
+		double kP = 4;//Proportional Component's Tunable Value 	-45 = 0.5	-90 = 0.5
+		double kI = 0.25;//Integral Component's Tunable Value 		-45 = 0.5	-90 = 1.0
 		double kD = 0.1;//Derivative Component's Tunable Value 		-45 = 0	1	-90 = 0.3
 
 		double error = angle - ahrs->GetYaw();
 		double output;
 
-		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
+		while(timeBuffer < 5 && (IsEnabled() && IsAutonomous()) && t1.Get() < timeOut){//Need to find a stop condition
 			error = angle - ahrs->GetYaw();//Error = Final - Current
+
+			printf("Timer %f\n", t1.Get());
 
 			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
 			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
@@ -416,7 +479,7 @@ public:
 				printf("Angle = 0");
 			}
 
-			if(fabs(error) < 1){
+			if(fabs(error) < 3){
 				timeBuffer++;
 			}
 			else{
@@ -535,7 +598,44 @@ public:
 		}
 	}
 	*/
-	void DriveFRC(double outputMagnitude, double curve){
+
+	void DriveTime(int time, double speed){
+		SetSpeed(speed, speed);
+		Wait(time);
+		SetSpeed(0, 0);
+	}
+
+	void DriveWhile(double distance, double speed){
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
+
+		double wheelRadius = 2.5;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		// 22933P	R		15.707in
+		//			1440P	R
+
+		if(distance > 0){
+			while(right0.GetSelectedSensorPosition(0) < EncTarget && (IsEnabled() && IsAutonomous())){
+				SetSpeed(-speed, -speed);
+				printf("While Enc: %i\n", right0.GetSelectedSensorPosition(0));
+			}
+		}
+		else if(distance < 0){
+			while(right0.GetSelectedSensorPosition(0) > EncTarget && (IsEnabled() && IsAutonomous())){
+				SetSpeed(speed, speed);
+				printf("While Enc: %i\n", right0.GetSelectedSensorPosition(0));
+			}
+		}
+		SetSpeed(0.0, 0.0);
+	}
+
+ 	void DriveFRC(double outputMagnitude, double curve){
 		double leftOutput, rightOutput;
 		double m_sensitivity = 0.05;
 		if (curve < 0){
@@ -578,15 +678,15 @@ public:
 
 		double integral = 0;
 		double kP = 0.125;
-		double kI = 0.05;
+		double kI = 0.15;
 		double output = 0;
 		double iterationTime = 0.1;
 		int timeBuffer = 0;
 
-		double error = EncTarget - left0.GetSelectedSensorPosition(0);
+		double error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - left0.GetSelectedSensorPosition(0);
+			error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
@@ -633,17 +733,17 @@ public:
 
 		double integral = 0;
 		double kP = 0.125;
-		double kI = 0.05;
+		double kI = 0.15;
 		double gP = 0.125;
 		double output = 0;
 		double iterationTime = 0.1;
 		double gyroCorrection = 0;
 		int timeBuffer = 0;
 
-		double error = EncTarget - left0.GetSelectedSensorPosition(0);
+		double error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){
-			error = EncTarget - left0.GetSelectedSensorPosition(0);
+			error = EncTarget - right0.GetSelectedSensorPosition(0);
 
 			integral = integral + (error*iterationTime);
 
@@ -690,18 +790,20 @@ public:
 		left1.SetNeutralMode(NeutralMode::Brake);
 		right0.SetNeutralMode(NeutralMode::Brake);
 		right1.SetNeutralMode(NeutralMode::Brake);
+		PTO_Enc->Reset();
+
 
 		int startPos = 0;//0 = Default, 1 = Right, 2 = Center, 3 = Left
 		char allianceSwitch = gameData[0];
 		char scale = gameData[1];
 
-		if(posRight.Get()){
+		if(!posRight.Get()){
 			startPos = 1;
 		}
-		else if(posCenter.Get()){
+		else if(!posCenter.Get()){
 			startPos = 2;
 		}
-		else if(posLeft.Get()){
+		else if(!posLeft.Get()){
 			startPos = 3;
 		}
 		else{
@@ -709,70 +811,89 @@ public:
 		}
 
 		if(startPos == 1){//Starting: Right
+			printf("Right\n");
 			if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the wrong side
-				DriveStraightPID(120, 0.7);//Cross the auto line and stop
+				DriveWhile(120, 0.7);//Cross the auto line and stop
 			}
 			else if(allianceSwitch == 'R' && scale == 'L'){//If switch is right and scale is wrong
-				DriveStraightPID(120, 0.7);//Score Switch
-				PIDTurn(-90);
-				RunLiftTime(0.8, 4);
-				ClampToggle(OPEN);
+				DriveWhile(115, 0.9);//Score Switch
+				RunLiftTime(0.8, 1.5);
+				PIDTurn(-90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
+				RunIntake(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'R'){//If scale is right and switch is wrong
-				DriveStraightPID(240, 0.7);//Score Scale
-				PIDTurn(-90);
+				DriveWhile(222, 0.9);//Score Scale
 				RunLiftLimits(TOP);
+				PIDTurn(-90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
 				RunIntake(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the right side
-				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
-				PIDTurn(-90);
+				DriveWhile(222, 0.9);//Score Scale
 				RunLiftLimits(TOP);
+				PIDTurn(-90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
 				RunIntake(-1.0, 1);
 			}
 		}
 		else if(startPos == 2){//Starting: Center
+			printf("Center\n");
 			if(allianceSwitch == 'L'){//If switch is left
-				DriveStraightPID(40, 0.7);//Score Switch
-				PIDTurn(-90);
-				DriveStraightPID(36, 0.7);
-				PIDTurn(90);
-				DriveStraightPID(30, 0.5);
-				RunLiftTime(0.8, 4);
-				ClampToggle(OPEN);
+				DriveWhile(40, 0.7);//Score Switch
+				PIDTurn(-90, 5.0);
+				DriveWhile(36, 0.7);
+				PIDTurn(90, 5.0);
+				RunLiftTime(0.8, 2);
+				DriveTime(2, 0.5);
+				RunIntake(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R'){//If switch is right
-				DriveStraightPID(40, 0.7);//Score Switch
-				PIDTurn(90);
-				DriveStraightPID(36, 0.7);
-				PIDTurn(-90);
-				DriveStraightPID(30, 0.5);
-				RunLiftTime(0.8, 4);
-				ClampToggle(OPEN);
+				DriveWhile(40, 0.7);//Score Switch
+				PIDTurn(90, 5.0);
+				DriveWhile(36, 0.7);
+				PIDTurn(-90, 5.0);
+				RunLiftTime(0.8, 2);
+				DriveTime(2, 0.5);
+				RunIntake(-1.0, 1);
 			}
 		}
 		else if(startPos == 3){//Starting: Left
+			printf("Left\n");
 			if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the wrong side
-				DriveStraightPID(120, 0.7);//Cross the auto line and stop
+				DriveWhile(120, 0.7);//Cross the auto line and stop
 			}
 			else if(allianceSwitch == 'L' && scale == 'R'){//If switch is right and scale is wrong
-				DriveStraightPID(120, 0.7);//Score Switch
-				PIDTurn(90);
-				RunLiftTime(0.8, 4);
-				ClampToggle(OPEN);
+				DriveWhile(115, 0.9);//Score Switch
+				RunLiftTime(0.8, 1.5);
+				PIDTurn(90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
+				RunIntake(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'L'){//If scale is right and switch is wrong
-				DriveStraightPID(240, 0.7);//Score Scale
-				PIDTurn(90);
+				DriveWhile(222, 0.9);//Score Scale
 				RunLiftLimits(TOP);
+				PIDTurn(-90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
 				RunIntake(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the right side
-				DriveStraightPID(240, 0.7);//Scale supersedes switch, Possible 2 cube auto
-				PIDTurn(90);
+				DriveWhile(222, 0.9);//Score Scale
 				RunLiftLimits(TOP);
+				PIDTurn(-90, 5.0);
+				pentaTilt.Set(true);
+				Wait(0.75);
 				RunIntake(-1.0, 1);
 			}
+		}
+		else{
+			printf("Default\n");
+			DriveTime(0.7, 2.5);
 		}
 	}
 
@@ -782,7 +903,7 @@ public:
 
 		left0.SetSelectedSensorPosition(0, 0, 0);
 		right0.SetSelectedSensorPosition(0, 0, 0);
-		PTO0.SetSelectedSensorPosition(0, 0, 0);
+		PTO_Enc->Reset();
 
 		while(IsEnabled() && IsOperatorControl()){
 			//Arcade
@@ -813,42 +934,78 @@ public:
 			}
 
 			//Lift (driver 2)
-			if(fabs((stick1->GetY()) >= THRESHOLD)){//Should add limits based on mag switch or encoder
+			if(stick1->GetRawButton(4)){
+				/*
+				if(PTO_Enc->Get() < 3000){
+					SetLiftSpeed(0.5);
+				}
+				else if(PTO_Enc->Get() > 3000){
+					SetLiftSpeed(-0.5);
+				}
+				else{
+					SetLiftSpeed(0.0);
+				}
+				*/
+
+				double kP = 0.01;
+
+				double error = 3000 - PTO_Enc->Get();
+
+				double output = kP * error;
+
+				SetLiftSpeed(output);
+
+			}
+			else if(stick1->GetY() >= THRESHOLD && limTop.Get() && !stick1->GetRawButton(4)){//Should add limits based on mag switch or encoder
+				printf("Stick1 Y = %f\n", stick1->GetY());
+				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
+				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
+			}
+			else if(stick1->GetY() <= -THRESHOLD && limBottom.Get() && !stick1->GetRawButton(4)){//Lower limits
+				printf("Stick1 Y = %f\n", stick1->GetY());
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
 			else{
-				PTO0.Set(ControlMode::PercentOutput, 0);
-				PTO1.Set(ControlMode::PercentOutput, 0);
+				PTO0.Set(ControlMode::PercentOutput, 0.1);
+				PTO1.Set(ControlMode::PercentOutput, 0.1);
 			}
 
 			//Intake (driver 2)
 			if(stick1->GetRawButton(1)){//Trigger button
-				pentacept0.Set(ControlMode::PercentOutput, 100);
-				pentacept1.Set(ControlMode::PercentOutput, 100);
+				pentacept0.Set(ControlMode::PercentOutput, 1);
+				pentacept1.Set(ControlMode::PercentOutput, 1);
 			}
 			else if(stick1->GetRawButton(2)){//Button 2
-				pentacept0.Set(ControlMode::PercentOutput, -100);
-				pentacept1.Set(ControlMode::PercentOutput, -100);
+				pentacept0.Set(ControlMode::PercentOutput, -1);
+				pentacept1.Set(ControlMode::PercentOutput, -1);
+			}
+			else if(stick1->GetRawButton(5)){//Button 2
+				pentacept0.Set(ControlMode::PercentOutput, -0.4);
+				pentacept1.Set(ControlMode::PercentOutput, -0.4);
 			}
 			else{
-				pentacept0.Set(ControlMode::PercentOutput, 0);
-				pentacept1.Set(ControlMode::PercentOutput, 0);
+				pentacept0.Set(ControlMode::PercentOutput, 0.2);
+				pentacept1.Set(ControlMode::PercentOutput, 0.2);
 			}
 
 			if(stick1->GetRawButton(3)){//Button 3
-				clamp.Set(DoubleSolenoid::Value::kForward);
+				clamp.Set(true);
+				printf("Clamp Open\n");
 			}
 			else{
-				clamp.Set(DoubleSolenoid::Value::kReverse);
+				clamp.Set(false);
 			}
 
-			if(stick1->GetRawButton(4)){
-				pentaTilt.Set(DoubleSolenoid::Value::kForward);
+			if(stick1->GetRawButton(7)){
+				pentaTilt.Set(true);
+				printf("Tilt Down\n");
 			}
 			else{
-				pentaTilt.Set(DoubleSolenoid::Value::kReverse);
+				pentaTilt.Set(false);
 			}
+
+
 
 			if(stick0->GetRawButton(5)){
 				redLED->Set(Relay::Value::kForward);
