@@ -113,6 +113,7 @@ public:
 		left1.SetInverted(true);
 		PTO0.SetInverted(true);
 		PTO1.SetInverted(true);
+		pentacept1.SetInverted(true);
 		
 		clamp.Set(false);
 		pentaTilt.Set(false);
@@ -123,9 +124,6 @@ public:
 
 		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		right0.SetSensorPhase(true);
-
-		//PTO0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
-		//PTO0.SetSensorPhase(false);
 		
 		printf("Valentina Tereshkova, Reporting for duty.");
 	}
@@ -136,41 +134,46 @@ public:
 		right0.Set(ControlMode::PercentOutput, right);
 		right1.Set(ControlMode::PercentOutput, right);
 		printf("SetSpeed: %f, %f\n", left, right);
+		SmartDashboard::PutNumber("SetSpeed Left", left);
+		SmartDashboard::PutNumber("SetSpeed Right", right);
 	}
 
 	void SetIntakeSpeed(double speed){
 		pentacept0.Set(ControlMode::PercentOutput, speed);
 		pentacept1.Set(ControlMode::PercentOutput, speed);
 		printf("SetSpeed: %f\n", speed);
+		SmartDashboard::PutNumber("SetIntakeSpeed", speed);
 	}
 
 	void SetLiftSpeed(double speed){
 		PTO0.Set(ControlMode::PercentOutput, speed);
 		PTO1.Set(ControlMode::PercentOutput, speed);
 		printf("SetSpeed: %f\n", speed);
+		SmartDashboard::PutNumber("SetLiftSpeed", speed);
 	}
 
-	void RunIntake(double speed, double time){
+	void RunIntakeTime(double speed, double time){
 		pentacept0.Set(ControlMode::PercentOutput, speed);
 		pentacept1.Set(ControlMode::PercentOutput, speed);
+		SmartDashboard::PutNumber("RunIntakeTime", speed);
 		Wait(time);
 		pentacept0.Set(ControlMode::PercentOutput, 0.0);
 		pentacept1.Set(ControlMode::PercentOutput, 0.0);
-	}
-
-	void ClampToggle(bool state){
-			clamp.Set(state);
+		SmartDashboard::PutNumber("RunIntakeTime", 0.0);
 	}
 
 	void RunLiftTime(double speed, double time){
 		PTO0.Set(ControlMode::PercentOutput, speed);
 		PTO1.Set(ControlMode::PercentOutput, speed);
+		SmartDashboard::PutNumber("RunLiftTime", speed);
 		Wait(time);
 		PTO0.Set(ControlMode::PercentOutput, 0.0);
 		PTO1.Set(ControlMode::PercentOutput, 0.0);
+		SmartDashboard::PutNumber("RunLiftTime", 0.0);
 	}
 
 	void RunLiftLimits(bool side){
+		SmartDashboard::PutBoolean("RunLiftLimits", false);
 		if(side){
 			while(limTop.Get() && (IsEnabled() && IsAutonomous())){
 				PTO0.Set(ControlMode::PercentOutput, 0.7);
@@ -186,6 +189,7 @@ public:
 		PTO0.Set(ControlMode::PercentOutput, 0.0);
 		PTO1.Set(ControlMode::PercentOutput, 0.0);
 		printf("Lift complete ENC: %i\n", PTO_Enc->Get());
+		SmartDashboard::PutBoolean("RunLiftLimits", true);
 	}
 
 	void RunLiftPosition(double position){
@@ -251,6 +255,10 @@ public:
 		}
 
 		printf("PID Complete\n");
+	}
+
+	void ClampToggle(bool state){
+		clamp.Set(state);
 	}
 
 	double Map(double x, double in_min, double in_max, double out_min, double out_max){//This function scales one value to a set range
@@ -384,8 +392,6 @@ public:
 		printf("PID Complete\n");
 	}
 
-
-
 	void PTurn(int angle){
 		ahrs->Reset();
 		Wait(1);
@@ -403,6 +409,8 @@ public:
 
 			output = kP * error;//Sum all components together
 			output = Map(output, -angle, angle, -0.7, 0.7);
+
+
 
 			if(angle < 0){
 				SetSpeed(output, -output);
@@ -580,7 +588,8 @@ public:
 			Wait(iterationTime);//Wait the iteration time
 		}
 	}
-	/* Removed no sonar sensor on bot
+
+	/* Removed: no sonar sensor on bot
 	double SonarSensor(){
 		double supplied_voltage =5;
 		double vi= 270/supplied_voltage;
@@ -617,9 +626,6 @@ public:
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
 		printf("encIn:%f \n", encIn);
 
-		// 22933P	R		15.707in
-		//			1440P	R
-
 		if(distance > 0){
 			while(right0.GetSelectedSensorPosition(0) < EncTarget && (IsEnabled() && IsAutonomous())){
 				SetSpeed(-speed, -speed);
@@ -629,6 +635,38 @@ public:
 		else if(distance < 0){
 			while(right0.GetSelectedSensorPosition(0) > EncTarget && (IsEnabled() && IsAutonomous())){
 				SetSpeed(speed, speed);
+				printf("While Enc: %i\n", right0.GetSelectedSensorPosition(0));
+			}
+		}
+		SetSpeed(0.0, 0.0);
+	}
+
+	void DriveStraightWhile(double distance, double speed){
+		left0.SetSelectedSensorPosition(0, 0, 0);
+		right0.SetSelectedSensorPosition(0, 0, 0);
+		ahrs->Reset();
+
+		double wheelRadius = 2.5;
+		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
+		double PPR = 1440; //tried 831
+		double encIn = PPR / wheelCircumpfrence; //296.8
+		double EncTarget = distance * encIn; //(60*296.8)=17,808
+		double gyroCorrection = 0;
+		double gP = 0.125;
+		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
+		printf("encIn:%f \n", encIn);
+
+		if(distance > 0){
+			while(right0.GetSelectedSensorPosition(0) < EncTarget && (IsEnabled() && IsAutonomous())){
+				gyroCorrection = gP * ahrs->GetYaw();
+				DriveFRC(-speed, gyroCorrection);
+				printf("While Enc: %i\n", right0.GetSelectedSensorPosition(0));
+			}
+		}
+		else if(distance < 0){
+			while(right0.GetSelectedSensorPosition(0) > EncTarget && (IsEnabled() && IsAutonomous())){
+				gyroCorrection = gP * ahrs->GetYaw();
+				DriveFRC(speed, gyroCorrection);
 				printf("While Enc: %i\n", right0.GetSelectedSensorPosition(0));
 			}
 		}
@@ -821,7 +859,7 @@ public:
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'R'){//If scale is right and switch is wrong
 				DriveWhile(222, 0.9);//Score Scale
@@ -829,7 +867,7 @@ public:
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the right side
 				DriveWhile(222, 0.9);//Score Scale
@@ -837,7 +875,7 @@ public:
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 		}
 		else if(startPos == 2){//Starting: Center
@@ -849,7 +887,7 @@ public:
 				PIDTurn(90, 5.0);
 				RunLiftTime(0.8, 2);
 				DriveTime(2, 0.5);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R'){//If switch is right
 				DriveWhile(40, 0.7);//Score Switch
@@ -858,7 +896,7 @@ public:
 				PIDTurn(-90, 5.0);
 				RunLiftTime(0.8, 2);
 				DriveTime(2, 0.5);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 		}
 		else if(startPos == 3){//Starting: Left
@@ -872,7 +910,7 @@ public:
 				PIDTurn(90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'L'){//If scale is right and switch is wrong
 				DriveWhile(222, 0.9);//Score Scale
@@ -880,7 +918,7 @@ public:
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the right side
 				DriveWhile(222, 0.9);//Score Scale
@@ -888,7 +926,7 @@ public:
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
 				Wait(0.75);
-				RunIntake(-1.0, 1);
+				RunIntakeTime(-1.0, 1);
 			}
 		}
 		else{
@@ -1005,8 +1043,6 @@ public:
 				pentaTilt.Set(false);
 			}
 
-
-
 			if(stick0->GetRawButton(5)){
 				redLED->Set(Relay::Value::kForward);
 			}
@@ -1039,7 +1075,7 @@ public:
 	}
 
 
-	void Test() override {
+	void Test() override {//OMG 1080!!!1!11! Lacey made me do this
 
 	}
 
