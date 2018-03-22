@@ -125,6 +125,8 @@ public:
 		right0.ConfigSelectedFeedbackSensor(FeedbackDevice::QuadEncoder, 0, 0);
 		right0.SetSensorPhase(true);
 		
+		CameraServer::GetInstance()->StartAutomaticCapture();
+
 		printf("Valentina Tereshkova, Reporting for duty.");
 	}
 
@@ -195,66 +197,27 @@ public:
 	void RunLiftPosition(double position){
 		PTO_Enc->Reset();
 
-		double wheelRadius = 0.25;
+		double wheelRadius = 2.5;
 		double wheelCircumpfrence = 2 * 3.14159265 * wheelRadius; //13.8
-		double PPR = 2400; //tried 831
+		double PPR = 1440; //tried 831
 		double encIn = PPR / wheelCircumpfrence; //296.8
 		double EncTarget = position * encIn; //(60*296.8)=17,808
 		printf("EncTarget: %f \n", EncTarget);  //printing out 17776 :)
 		printf("encIn:%f \n", encIn);
 
-		double errorPrior = 0;//Error from previous cycle starts at 0 since no previous cycle
-		double integral = 0;//Integral starts at 0 since that's how integral work
-		double derivative = 0;//Derivative technically doesn't need to be instantiated before the loop, I just thought it looked nicer up here
-		double iterationTime = 0.1;//Time in seconds each iteration of the loop should take
-		int timeBuffer = 0;
-
-		double kP = 0.125;
-		double kI = 0.15;
-		double kD = 0.01;
-
-		double output;
-		double error = EncTarget - PTO_Enc->Get();
-
-		while(timeBuffer < 10 && (IsEnabled() && IsAutonomous())){//Need to find a stop condition
-			error = EncTarget - ahrs->GetYaw();//Error = Final - Current
-
-			integral = integral + (error*iterationTime);//Integral is summing the value of all previous errors to eliminate steady state error
-			derivative = (error - errorPrior)/iterationTime;//Derivative checks the instantaneous velocity of the error to increase stability
-
-			output = (kP * error) + (kI * integral) + (kD * derivative);//Sum all components together
-
-			if(EncTarget < 0){
-				SetLiftSpeed(output);
+		if(position > 0){
+			while(PTO_Enc->Get() < EncTarget && (IsEnabled() && IsAutonomous())){
+				SetLiftSpeed(0.7);
+				printf("While Enc: %i\n", PTO_Enc->Get());
 			}
-			else if(EncTarget > 0){
-				SetLiftSpeed(-output);
-			}
-			else{
-				printf("setPoint = 0");
-			}
-
-			if(fabs(error) < 1){
-				timeBuffer++;
-			}
-			else{
-				timeBuffer = 0;
-			}
-
-			errorPrior = error;//Set previous error to this iterations error for next time
-
-			SmartDashboard::PutNumber("Proportional", kP * error);
-			SmartDashboard::PutNumber("Integral", integral);
-			SmartDashboard::PutNumber("Derivative", derivative);
-			SmartDashboard::PutNumber("Output", output);
-			SmartDashboard::PutNumber("Error", error);
-			SmartDashboard::PutNumber("Setpoint", EncTarget);
-			SmartDashboard::PutNumber("Current Angle", ahrs->GetYaw());
-
-			Wait(iterationTime);//Wait the iteration time
 		}
-
-		printf("PID Complete\n");
+		else if(position < 0){
+			while(PTO_Enc->Get() > EncTarget && (IsEnabled() && IsAutonomous())){
+				SetLiftSpeed(-0.7);
+				printf("While Enc: %i\n", PTO_Enc->Get());
+			}
+		}
+		SetLiftSpeed(0.0);
 	}
 
 	void ClampToggle(bool state){
@@ -931,7 +894,6 @@ public:
 		}
 		else{
 			printf("Default\n");
-			DriveTime(0.7, 2.5);
 		}
 	}
 
@@ -1010,13 +972,13 @@ public:
 			}
 
 			//Intake (driver 2)
-			if(stick1->GetRawButton(1)){//Trigger button
-				pentacept0.Set(ControlMode::PercentOutput, 1);
-				pentacept1.Set(ControlMode::PercentOutput, 1);
-			}
-			else if(stick1->GetRawButton(2)){//Button 2
+			if(stick1->GetRawButton(2)){//Button 2
 				pentacept0.Set(ControlMode::PercentOutput, -1);
 				pentacept1.Set(ControlMode::PercentOutput, -1);
+			}
+			else if(stick1->GetRawButton(1)){//Trigger button
+				pentacept0.Set(ControlMode::PercentOutput, 1);
+				pentacept1.Set(ControlMode::PercentOutput, 1);
 			}
 			else if(stick1->GetRawButton(5)){//Button 2
 				pentacept0.Set(ControlMode::PercentOutput, -0.4);
