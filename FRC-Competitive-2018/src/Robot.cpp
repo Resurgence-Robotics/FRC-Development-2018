@@ -825,7 +825,7 @@ public:
 				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'R'){//If scale is right and switch is wrong
-				DriveWhile(222, 0.9);//Score Scale
+				DriveWhile(214, 0.9);//Score Scale //222
 				RunLiftLimits(TOP);
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
@@ -833,7 +833,7 @@ public:
 				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'R'){//If both scale and switch are on the right side
-				DriveWhile(222, 0.9);//Score Scale
+				DriveWhile(214, 0.9);//Score Scale
 				RunLiftLimits(TOP);
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
@@ -876,7 +876,7 @@ public:
 				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'R' && scale == 'L'){//If scale is right and switch is wrong
-				DriveWhile(222, 0.9);//Score Scale
+				DriveWhile(214, 0.9);//Score Scale
 				RunLiftLimits(TOP);
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
@@ -884,7 +884,7 @@ public:
 				RunIntakeTime(-1.0, 1);
 			}
 			else if(allianceSwitch == 'L' && scale == 'L'){//If both scale and switch are on the right side
-				DriveWhile(222, 0.9);//Score Scale
+				DriveWhile(214, 0.9);//Score Scale
 				RunLiftLimits(TOP);
 				PIDTurn(-90, 5.0);
 				pentaTilt.Set(true);
