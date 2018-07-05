@@ -910,6 +910,7 @@ public:
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
 
+
 			//Tank
 			//left = stick0->GetY();
 			//right = stick1->GetY();
@@ -934,34 +935,12 @@ public:
 			}
 
 			//Lift (driver 2)
-			if(stick1->GetRawButton(4)){
-				/*
-				if(PTO_Enc->Get() < 3000){
-					SetLiftSpeed(0.5);
-				}
-				else if(PTO_Enc->Get() > 3000){
-					SetLiftSpeed(-0.5);
-				}
-				else{
-					SetLiftSpeed(0.0);
-				}
-				*/
-
-				double kP = 0.01;
-
-				double error = 3000 - PTO_Enc->Get();
-
-				double output = kP * error;
-
-				SetLiftSpeed(output);
-
-			}
-			else if(stick1->GetY() >= THRESHOLD && limTop.Get() && !stick1->GetRawButton(4)){//Should add limits based on mag switch or encoder
+			if(stick1->GetY() >= THRESHOLD && limTop.Get()){//Should add limits based on mag switch or encoder
 				printf("Stick1 Y = %f\n", stick1->GetY());
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
 			}
-			else if(stick1->GetY() <= -THRESHOLD && limBottom.Get() && !stick1->GetRawButton(4)){//Lower limits
+			else if(stick1->GetY() <= -THRESHOLD && limBottom.Get()){//Lower limits
 				printf("Stick1 Y = %f\n", stick1->GetY());
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
@@ -969,6 +948,22 @@ public:
 			else{
 				PTO0.Set(ControlMode::PercentOutput, 0.1);
 				PTO1.Set(ControlMode::PercentOutput, 0.1);
+			}
+
+			if(stick1->GetPOV() == 0){
+				SetSpeed(-0.3, -0.3);
+			}
+			else if(stick1->GetPOV() == 90){
+				SetSpeed(-0.4, 0.4);
+			}
+			else if(stick1->GetPOV() == 180){
+				SetSpeed(0.3, 0.3);
+			}
+			else if(stick1->GetPOV() == 270){
+				SetSpeed(0.4, -0.4);
+			}
+			else{
+				SetSpeed(0.0, 0.0);
 			}
 
 			//Intake (driver 2)
@@ -985,8 +980,8 @@ public:
 				pentacept1.Set(ControlMode::PercentOutput, -0.4);
 			}
 			else{
-				pentacept0.Set(ControlMode::PercentOutput, 0.2);
-				pentacept1.Set(ControlMode::PercentOutput, 0.2);
+				pentacept0.Set(ControlMode::PercentOutput, 0.0);
+				pentacept1.Set(ControlMode::PercentOutput, 0.0);
 			}
 
 			if(stick1->GetRawButton(3)){//Button 3
@@ -1004,6 +999,7 @@ public:
 			else{
 				pentaTilt.Set(false);
 			}
+
 
 			if(stick0->GetRawButton(5)){
 				redLED->Set(Relay::Value::kForward);
