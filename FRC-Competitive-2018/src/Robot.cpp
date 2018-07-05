@@ -900,6 +900,7 @@ public:
 	void OperatorControl() override{
 		double left;
 		double right;
+		bool twoStick = true;
 
 		left0.SetSelectedSensorPosition(0, 0, 0);
 		right0.SetSelectedSensorPosition(0, 0, 0);
@@ -910,26 +911,25 @@ public:
 			left = stick0->GetY() - stick0->GetX();
 			right = stick0->GetY() + stick0->GetX();
 
-
 			//Tank
 			//left = stick0->GetY();
 			//right = stick1->GetY();
 
 			//Drive Train (driver 1)
-			if(fabs(left) >= THRESHOLD){
+			if(fabs(left) >= THRESHOLD && twoStick == true){
 				left0.Set(ControlMode::PercentOutput, left);
 				left1.Set(ControlMode::PercentOutput, left);
 			}
-			else{
+			else if(twoStick == true){
 				left0.Set(ControlMode::PercentOutput, 0);
 				left1.Set(ControlMode::PercentOutput, 0);
 			}
 
-			if(fabs(right) >= THRESHOLD){
+			if(fabs(right) >= THRESHOLD && twoStick == true){
 				right0.Set(ControlMode::PercentOutput, right);
 				right1.Set(ControlMode::PercentOutput, right);
 			}
-			else{
+			else if(twoStick == true){
 				right0.Set(ControlMode::PercentOutput, 0);
 				right1.Set(ControlMode::PercentOutput, 0);
 			}
@@ -950,19 +950,19 @@ public:
 				PTO1.Set(ControlMode::PercentOutput, 0.1);
 			}
 
-			if(stick1->GetPOV() == 0){
-				SetSpeed(-0.3, -0.3);
+			if(stick1->GetPOV() == 0 && twoStick == false){
+				SetSpeed(-stick1->GetThrottle(), -stick1->GetThrottle());
 			}
-			else if(stick1->GetPOV() == 90){
-				SetSpeed(-0.4, 0.4);
+			else if(stick1->GetPOV() == 90 && twoStick == false){
+				SetSpeed(-stick1->GetThrottle(), stick1->GetThrottle());
 			}
-			else if(stick1->GetPOV() == 180){
-				SetSpeed(0.3, 0.3);
+			else if(stick1->GetPOV() == 180 && twoStick == false){
+				SetSpeed(stick1->GetThrottle(), stick1->GetThrottle());
 			}
-			else if(stick1->GetPOV() == 270){
-				SetSpeed(0.4, -0.4);
+			else if(stick1->GetPOV() == 270 && twoStick == false){
+				SetSpeed(stick1->GetThrottle(), -stick1->GetThrottle());
 			}
-			else{
+			else if(twoStick == false){
 				SetSpeed(0.0, 0.0);
 			}
 
