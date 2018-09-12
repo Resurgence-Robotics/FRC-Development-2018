@@ -915,6 +915,13 @@ public:
 			//left = stick0->GetY();
 			//right = stick1->GetY();
 
+			//Two Stick State Machine Toggle (driver 2)
+			if(stick1->GetRawButton(6)){
+				twoStick = !twoStick;
+				printf("Switching control mode");
+				Wait(0.5);
+			}
+
 			//Drive Train (driver 1)
 			if(fabs(left) >= THRESHOLD && twoStick == true){
 				left0.Set(ControlMode::PercentOutput, left);
@@ -935,7 +942,7 @@ public:
 			}
 
 			//Lift (driver 2)
-			if(stick1->GetY() >= THRESHOLD && limTop.Get()){//Should add limits based on mag switch or encoder
+			if(stick1->GetY() >= THRESHOLD && limTop.Get()){//Upper limits
 				printf("Stick1 Y = %f\n", stick1->GetY());
 				PTO0.Set(ControlMode::PercentOutput, stick1->GetY());
 				PTO1.Set(ControlMode::PercentOutput, stick1->GetY());
@@ -951,16 +958,16 @@ public:
 			}
 
 			if(stick1->GetPOV() == 0 && twoStick == false){
-				SetSpeed(-stick1->GetThrottle(), -stick1->GetThrottle());
+				SetSpeed(-0.5, -0.5);
 			}
 			else if(stick1->GetPOV() == 90 && twoStick == false){
-				SetSpeed(-stick1->GetThrottle(), stick1->GetThrottle());
+				SetSpeed(-0.5, 0.5);
 			}
 			else if(stick1->GetPOV() == 180 && twoStick == false){
-				SetSpeed(stick1->GetThrottle(), stick1->GetThrottle());
+				SetSpeed(0.5, 0.5);
 			}
 			else if(stick1->GetPOV() == 270 && twoStick == false){
-				SetSpeed(stick1->GetThrottle(), -stick1->GetThrottle());
+				SetSpeed(0.5, -0.5);
 			}
 			else if(twoStick == false){
 				SetSpeed(0.0, 0.0);
@@ -984,6 +991,7 @@ public:
 				pentacept1.Set(ControlMode::PercentOutput, 0.0);
 			}
 
+			//Clamp (driver 2)
 			if(stick1->GetRawButton(3)){//Button 3
 				clamp.Set(true);
 				printf("Clamp Open\n");
@@ -992,6 +1000,7 @@ public:
 				clamp.Set(false);
 			}
 
+			//Pentacept (driver 2)
 			if(stick1->GetRawButton(7)){
 				pentaTilt.Set(true);
 				printf("Tilt Down\n");
@@ -1000,7 +1009,7 @@ public:
 				pentaTilt.Set(false);
 			}
 
-
+			//LEDs (driver 1)
 			if(stick0->GetRawButton(5)){
 				redLED->Set(Relay::Value::kForward);
 			}
@@ -1030,8 +1039,13 @@ public:
 
 			Wait(0.04);
 		}
-	}
 
+		left0.SetNeutralMode(NeutralMode::Brake);
+		left1.SetNeutralMode(NeutralMode::Brake);
+		right0.SetNeutralMode(NeutralMode::Brake);
+		right1.SetNeutralMode(NeutralMode::Brake);
+
+	}
 
 	void Test() override {//OMG 1080!!!1!11! Lacey made me do this
 
